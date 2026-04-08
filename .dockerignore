@@ -1,0 +1,10 @@
+.git
+node_modules
+dist
+.npm-cache
+PLAN
+quick-run
+scripts
+supabase
+README.md
+eslint.config.js

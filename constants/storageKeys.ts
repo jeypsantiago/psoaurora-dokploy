@@ -1,0 +1,53 @@
+export const STORAGE_KEYS = {
+  theme: 'theme',
+  googleAccessToken: 'google_access_token',
+
+  users: 'aurora_users',
+  roles: 'aurora_roles',
+  session: 'aurora_session',
+  sidebarExpanded: 'aurora_sidebar_expanded',
+  backendUrlOverride: 'aurora_backend_url_override',
+  opsRunnerUrl: 'aurora_ops_runner_url',
+
+  landingConfig: 'aurora_landing_config',
+  registryRecords: 'aurora_registry_records',
+  recordDocTypes: 'record_doc_types',
+  recordDocFields: 'record_doc_fields',
+  dataCollections: 'settings_data_collections',
+  recordMunicipalities: 'record_municipalities',
+  recordLocations: 'record_locations',
+
+  supplyInventory: 'aurora_supply_inventory',
+  supplyRequests: 'aurora_supply_requests',
+  supplyItemsView: 'supply_items_view',
+  supplyInventoryView: 'supply_inventory_view',
+  supplyCart: 'supply_cart',
+  supplyRequestPurpose: 'supply_request_purpose',
+  supplyRisConfig: 'supply_ris_config',
+  supplyUnitMaster: 'supply_unit_master',
+
+  employmentRecords: 'aurora_employment_records',
+  employmentConfig: 'employment_config',
+  employmentSurveyProjects: 'employment_surveyProjects',
+  employmentFocalPersons: 'employment_focalPersons',
+  employmentDesignations: 'employment_designations',
+
+  propertyRegistryView: 'property_registry_view',
+  propertyConfig: 'aurora_property_config',
+  propertyCategories: 'aurora_property_categories',
+  propertyAssets: 'aurora_property_assets',
+  propertyCustody: 'aurora_property_custody',
+  propertyTransactions: 'aurora_property_transactions',
+  propertyEvents: 'aurora_property_events',
+  propertyCountLines: 'aurora_property_countlines',
+  propertyAuditLog: 'aurora_property_auditlog',
+
+  gmailOpenedIds: 'gmail_opened_ids',
+  gmailWhitelist: 'gmail_whitelist',
+
+  censusActivities: 'aurora_census_activities',
+  censusStatusOverrides: 'aurora_census_status_overrides',
+  censusSurveyMasters: 'aurora_census_survey_masters',
+  censusSurveyCycles: 'aurora_census_survey_cycles',
+  censusSurveysView: 'census_surveys_view',
+};

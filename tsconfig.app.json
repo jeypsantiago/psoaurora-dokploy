@@ -1,0 +1,23 @@
+{
+  "extends": "./tsconfig.base.json",
+  "include": [
+    "*.ts",
+    "*.tsx",
+    "components/**/*.ts",
+    "components/**/*.tsx",
+    "constants/**/*.ts",
+    "hooks/**/*.ts",
+    "hooks/**/*.tsx",
+    "pages/**/*.ts",
+    "pages/**/*.tsx",
+    "services/**/*.ts",
+    "services/**/*.tsx",
+    "vite-env.d.ts"
+  ],
+  "exclude": [
+    "dist",
+    "node_modules",
+    "scripts",
+    "supabase"
+  ]
+}
