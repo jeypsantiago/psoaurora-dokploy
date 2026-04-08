@@ -169,7 +169,9 @@ const normalizeUserPayload = (payload: UserMutationPayload, includePassword = tr
   const normalizedRoles = Array.isArray(payload.roles)
     ? payload.roles.map((value) => String(value)).filter(Boolean)
     : undefined;
-  const isSuperAdmin = normalizedRoles ? normalizedRoles.includes('Super Admin') : undefined;
+  const isSuperAdmin = typeof payload.isSuperAdmin === 'boolean'
+    ? payload.isSuperAdmin
+    : (normalizedRoles ? normalizedRoles.includes('Super Admin') : undefined);
 
   return {
     email: typeof payload.email === 'string' ? payload.email.trim().toLowerCase() : undefined,
@@ -196,16 +198,16 @@ const buildStaffUserFormData = (payload: UserMutationPayload, includePassword = 
   const formData = new FormData();
 
   appendIfDefined(formData, 'email', normalized.email);
-  appendIfDefined(formData, 'emailVisibility', true);
-  appendIfDefined(formData, 'verified', true);
+  appendIfDefined(formData, 'emailVisibility', typeof payload.emailVisibility === 'boolean' ? payload.emailVisibility : undefined);
+  appendIfDefined(formData, 'verified', typeof payload.verified === 'boolean' ? payload.verified : undefined);
   appendIfDefined(formData, 'name', normalized.name);
-  appendIfDefined(formData, 'roles', normalized.roles ?? []);
-  appendIfDefined(formData, 'isSuperAdmin', normalized.isSuperAdmin ?? false);
+  appendIfDefined(formData, 'roles', normalized.roles);
+  appendIfDefined(formData, 'isSuperAdmin', normalized.isSuperAdmin);
   appendIfDefined(formData, 'gender', normalized.gender);
   appendIfDefined(formData, 'position', normalized.position);
   appendIfDefined(formData, 'lastAccess', normalized.lastAccess);
-  appendIfDefined(formData, 'prefsBundle', normalized.prefsBundle ?? {});
-  appendIfDefined(formData, 'mustResetPassword', normalized.mustResetPassword ?? false);
+  appendIfDefined(formData, 'prefsBundle', normalized.prefsBundle);
+  appendIfDefined(formData, 'mustResetPassword', normalized.mustResetPassword);
 
   if (normalized.password) {
     appendIfDefined(formData, 'password', normalized.password);
@@ -265,6 +267,8 @@ const usersCollection = {
       const normalized = normalizeUserPayload(payload, true);
       const formData = buildStaffUserFormData({
         ...payload,
+        emailVisibility: true,
+        verified: true,
         mustResetPassword: normalized.password ? false : true,
       });
 
