@@ -25,6 +25,7 @@ export interface User {
   name: string;
   email: string;
   roles: string[];
+  prefsBundle?: Record<string, unknown>;
   gender: string;
   position: string;
   password?: string;
@@ -36,6 +37,7 @@ export interface User {
   avatarPath?: string;
   signaturePath?: string;
   mustResetPassword?: boolean;
+  isSuperAdmin?: boolean;
 }
 
 export interface UserMediaInput {
@@ -156,12 +158,16 @@ const normalizeRoles = (value: unknown): string[] => {
 const fromAuthRecord = (record: any): User => {
   const avatarUrl = (typeof record.avatar === 'string' ? record.avatar : '') || toRecordFileUrl(record, 'avatar');
   const signatureUrl = (typeof record.signature === 'string' ? record.signature : '') || toRecordFileUrl(record, 'signature');
+  const prefsBundle = record?.prefsBundle && typeof record.prefsBundle === 'object' && !Array.isArray(record.prefsBundle)
+    ? record.prefsBundle
+    : {};
 
   return {
     id: String(record.id),
     name: record.name || record.email || 'Unnamed User',
     email: record.email || '',
     roles: normalizeRoles(record.roles),
+    prefsBundle,
     gender: record.gender || 'Prefer not to say',
     position: record.position || '',
     lastAccess: record.lastAccess || 'Never',
@@ -172,6 +178,7 @@ const fromAuthRecord = (record: any): User => {
     avatarPath: typeof record.avatarPath === 'string' ? record.avatarPath : '',
     signaturePath: typeof record.signaturePath === 'string' ? record.signaturePath : '',
     mustResetPassword: !!record.mustResetPassword,
+    isSuperAdmin: !!record.isSuperAdmin,
   };
 };
 
@@ -182,41 +189,6 @@ const parseStoredRoles = (): Role[] | null => {
   }
 
   return null;
-};
-
-const scheduleBackgroundTask = (task: () => void) => {
-  if (typeof window === 'undefined') {
-    task();
-    return;
-  }
-
-  const browserWindow = window as Window & {
-    requestIdleCallback?: (
-      callback: () => void,
-      options?: { timeout?: number },
-    ) => number;
-  };
-
-  if (typeof browserWindow.requestIdleCallback === 'function') {
-    browserWindow.requestIdleCallback(() => {
-      task();
-    }, { timeout: 1500 });
-    return;
-  }
-
-  window.setTimeout(task, 0);
-};
-
-const warmSignedInWorkspace = async (
-  ownerId: string,
-  refreshUsers: () => Promise<void>,
-) => {
-  if (!backend.authStore.isValid || String(backend.authStore.record?.id ?? '') !== ownerId) {
-    return;
-  }
-
-  await hydrateManagedStateToLocalStorage(ownerId);
-  await refreshUsers();
 };
 
 export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -243,7 +215,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
 
-    const records = await backend.collection('staff_users').getFullList({ sort: 'name' });
+    const records = await backend.collection('users').getFullList({ sort: 'name' });
     setUsers(records.map((record) => fromAuthRecord(record)));
   }, []);
 
@@ -277,15 +249,11 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const ownerId = String(backend.authStore.record.id);
     dispatchThemeSync();
+    await hydrateManagedStateToLocalStorage(ownerId);
     syncRolesFromStorage();
     syncCurrentUserFromAuthStore();
+    await refreshUsers();
     setIsReady(true);
-
-    scheduleBackgroundTask(() => {
-      void warmSignedInWorkspace(ownerId, refreshUsers).catch((error) => {
-        console.error('Failed to finish secure workspace warmup.', error);
-      });
-    });
   }, [refreshUsers, syncCurrentUserFromAuthStore, syncRolesFromStorage]);
 
   useEffect(() => {
@@ -401,7 +369,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (signatureFile) payload[SIGNATURE_FIELD_NAME] = signatureFile;
     }
 
-    const created = await backend.collection('staff_users').create(payload);
+    const created = await backend.collection('users').create(payload);
 
     setUsers((prev) => [...prev, fromAuthRecord(created)]);
   }, []);
@@ -422,6 +390,10 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (typeof userData.gender === 'string') payload.gender = userData.gender;
     if (typeof userData.position === 'string') payload.position = userData.position;
     if (typeof userData.lastAccess === 'string') payload.lastAccess = userData.lastAccess;
+    if (userData.prefsBundle && typeof userData.prefsBundle === 'object' && !Array.isArray(userData.prefsBundle)) {
+      payload.prefsBundle = userData.prefsBundle;
+    }
+    if (typeof userData.mustResetPassword === 'boolean') payload.mustResetPassword = userData.mustResetPassword;
     if (typeof userData.password === 'string' && userData.password.trim()) {
       payload.password = userData.password.trim();
       payload.passwordConfirm = userData.password.trim();
@@ -481,7 +453,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
 
-    const updated = await backend.collection('staff_users').update(id, payload, options);
+    const updated = await backend.collection('users').update(id, payload, options);
 
     if (backend.authStore.record?.id === id) {
       backend.authStore.save(backend.authStore.token, updated);
@@ -498,7 +470,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error('You cannot delete the currently authenticated account.');
     }
 
-    await backend.collection('staff_users').delete(id);
+    await backend.collection('users').delete(id);
 
     setUsers((prev) => prev.filter((user) => user.id !== id));
   }, [currentUser?.id]);
@@ -540,7 +512,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error('Email and password are required.');
     }
 
-    await backend.collection('staff_users').authWithPassword(identity, secret);
+    await backend.collection('users').authWithPassword(identity, secret);
 
     if (!backend.authStore.record) {
       throw new Error('Authentication succeeded but no account record was returned.');
@@ -548,21 +520,17 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const ownerId = String(backend.authStore.record.id);
 
-    void backend.collection('staff_users').update(ownerId, {
+    void backend.collection('users').update(ownerId, {
       lastAccess: new Date().toISOString(),
     }).catch(() => {
       // Non-fatal for login flow
     });
 
     dispatchThemeSync();
+    await hydrateManagedStateToLocalStorage(ownerId);
     syncRolesFromStorage();
     syncCurrentUserFromAuthStore();
-
-    scheduleBackgroundTask(() => {
-      void warmSignedInWorkspace(ownerId, refreshUsers).catch((error) => {
-        console.error('Failed to finish secure workspace warmup after login.', error);
-      });
-    });
+    await refreshUsers();
   }, [refreshUsers, syncCurrentUserFromAuthStore, syncRolesFromStorage]);
 
   const requestPasswordReset = useCallback(async (email: string) => {
@@ -581,7 +549,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     if (currentUser?.id) {
-      const refreshed = await backend.collection('staff_users').update(currentUser.id, {
+      const refreshed = await backend.collection('users').update(currentUser.id, {
         password: nextPassword,
         mustResetPassword: false,
       });

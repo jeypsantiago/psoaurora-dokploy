@@ -3,7 +3,7 @@ import { STORAGE_KEYS } from '../constants/storageKeys';
 
 export type AppStateScope = 'global' | 'user';
 
-const STAFF_USER_PREFS_FIELD = 'prefsBundle';
+const USER_PREFS_FIELD = 'prefsBundle';
 
 const APP_STATE_SCOPE_MAP: Record<string, AppStateScope> = {
   [STORAGE_KEYS.roles]: 'global',
@@ -196,22 +196,22 @@ const deleteRecordByStoredKey = async (storedKey: string) => {
   appStateRecordIdByKey.delete(storedKey);
 };
 
-const getStaffUserRecord = async (ownerId: string) => {
+const getUserRecord = async (ownerId: string) => {
   const authRecord = backend.authStore.record;
   if (
     authRecord
     && String(authRecord.id) === ownerId
-    && Object.prototype.hasOwnProperty.call(authRecord, STAFF_USER_PREFS_FIELD)
+    && Object.prototype.hasOwnProperty.call(authRecord, USER_PREFS_FIELD)
   ) {
     return authRecord;
   }
 
-  return backend.collection('staff_users').getOne(ownerId);
+  return backend.collection('users').getOne(ownerId);
 };
 
-const updateStaffUserPrefsBundle = async (ownerId: string, bundle: Record<string, unknown>) => {
-  const updated = await backend.collection('staff_users').update(ownerId, {
-    [STAFF_USER_PREFS_FIELD]: bundle,
+const updateUserPrefsBundle = async (ownerId: string, bundle: Record<string, unknown>) => {
+  const updated = await backend.collection('users').update(ownerId, {
+    [USER_PREFS_FIELD]: bundle,
   });
 
   if (backend.authStore.record?.id === ownerId) {
@@ -252,11 +252,11 @@ export const upsertAppStateFromStorageValue = async (key: string, rawValue: stri
 
   if (scope === 'user' && normalizedOwner) {
     await enqueueUserBundleMutation(normalizedOwner, async () => {
-      const userRecord = await getStaffUserRecord(normalizedOwner);
-      const nextBundle = getBundleObject(userRecord?.[STAFF_USER_PREFS_FIELD]);
+      const userRecord = await getUserRecord(normalizedOwner);
+      const nextBundle = getBundleObject(userRecord?.[USER_PREFS_FIELD]);
       nextBundle[key] = value;
 
-      await updateStaffUserPrefsBundle(normalizedOwner, nextBundle);
+      await updateUserPrefsBundle(normalizedOwner, nextBundle);
     });
 
     return;
@@ -278,8 +278,8 @@ export const removeAppStateKey = async (key: string, ownerId?: string | null) =>
 
   if (scope === 'user' && normalizedOwner) {
     await enqueueUserBundleMutation(normalizedOwner, async () => {
-      const userRecord = await getStaffUserRecord(normalizedOwner);
-      const bundleObject = getBundleObject(userRecord?.[STAFF_USER_PREFS_FIELD]);
+      const userRecord = await getUserRecord(normalizedOwner);
+      const bundleObject = getBundleObject(userRecord?.[USER_PREFS_FIELD]);
 
       let shouldPersist = false;
       if (Object.prototype.hasOwnProperty.call(bundleObject, key)) {
@@ -288,7 +288,7 @@ export const removeAppStateKey = async (key: string, ownerId?: string | null) =>
       }
 
       if (shouldPersist) {
-        await updateStaffUserPrefsBundle(normalizedOwner, bundleObject);
+        await updateUserPrefsBundle(normalizedOwner, bundleObject);
       }
     });
 
@@ -318,9 +318,9 @@ export const loadManagedAppState = async (ownerId?: string | null): Promise<Reco
   }
 
   if (normalizedOwner) {
-    const userRecord = await getStaffUserRecord(normalizedOwner);
+    const userRecord = await getUserRecord(normalizedOwner);
     const managedBundleValues = extractManagedUserValuesFromBundle(
-      getBundleObject(userRecord?.[STAFF_USER_PREFS_FIELD]),
+      getBundleObject(userRecord?.[USER_PREFS_FIELD]),
     );
     for (const [appKey, value] of Object.entries(managedBundleValues)) {
       merged[appKey] = serializeStorageValue(value);
@@ -339,16 +339,16 @@ export const clearAllManagedAppState = async (): Promise<void> => {
   }
 
   appStateRecordIdByKey.clear();
-  const userRecords = await backend.collection('staff_users').getFullList({ sort: 'id' });
+  const userRecords = await backend.collection('users').getFullList({ sort: 'id' });
   for (const userRecord of userRecords) {
     const ownerId = String(userRecord.id);
     await enqueueUserBundleMutation(ownerId, async () => {
-      const currentRecord = await getStaffUserRecord(ownerId);
-      const bundleObject = getBundleObject(currentRecord?.[STAFF_USER_PREFS_FIELD]);
+      const currentRecord = await getUserRecord(ownerId);
+      const bundleObject = getBundleObject(currentRecord?.[USER_PREFS_FIELD]);
       const { nextBundle, changed } = removeManagedUserValuesFromBundle(bundleObject);
 
       if (changed) {
-        await updateStaffUserPrefsBundle(ownerId, nextBundle);
+        await updateUserPrefsBundle(ownerId, nextBundle);
       }
     });
   }

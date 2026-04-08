@@ -241,7 +241,7 @@ subscribeToAuth(() => {
   void syncAuthRecordFromStore();
 });
 
-const staffUsersCollection = {
+const usersCollection = {
   async getFullList(options?: { sort?: string }) {
     try {
       const records = await pb.collection(AUTH_COLLECTION).getFullList({
@@ -450,7 +450,7 @@ export const backend = {
     return pb.filter(value, params);
   },
   collection(name: string): any {
-    if (name === 'staff_users') return staffUsersCollection;
+    if (name === AUTH_COLLECTION || name === 'users' || name === 'staff_users') return usersCollection;
     if (name === 'app_state') return appStateCollection;
     if (name === 'landing_assets') return landingAssetsCollection;
     throw new Error(`Unsupported backend collection: ${name}`);
