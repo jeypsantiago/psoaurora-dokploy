@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useRbac } from '../RbacContext';
 import { Permission } from '../types';
@@ -16,15 +16,36 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requir
     const { can } = useRbac();
     const { alert } = useDialog();
     const location = useLocation();
+    const deniedRouteKeyRef = useRef<string | null>(null);
 
     const isSuperAdmin = !!currentUser?.isSuperAdmin || !!currentUser?.roles?.includes('Super Admin');
     const hasAccess = !requires || isSuperAdmin || can(requires);
+    const deniedRouteKey = currentUser?.id && requires
+        ? `${currentUser.id}:${location.pathname}:${requires}`
+        : null;
 
     useEffect(() => {
-        if (isReady && currentUser && !hasAccess) {
-            alert("Access Denied: You do not have the required permissions to view this page.");
+        if (!isReady || !currentUser || hasAccess || !deniedRouteKey) {
+            deniedRouteKeyRef.current = null;
+            return;
         }
-    }, [isReady, currentUser, hasAccess, alert]);
+
+        if (deniedRouteKeyRef.current === deniedRouteKey) {
+            return;
+        }
+
+        deniedRouteKeyRef.current = deniedRouteKey;
+        console.warn('[ProtectedRoute] denied route access', {
+            path: location.pathname,
+            requiredPermission: requires,
+            currentUserId: currentUser.id,
+            currentUserEmail: currentUser.email,
+            currentUserRoles: currentUser.roles,
+            currentUserIsSuperAdmin: currentUser.isSuperAdmin,
+            hasAccess,
+        });
+        void alert("Access Denied: You do not have the required permissions to view this page.");
+    }, [alert, currentUser, deniedRouteKey, hasAccess, isReady, location.pathname, requires]);
 
     if (!isReady) {
         return <SecureWorkspaceBootstrap />;
@@ -35,7 +56,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requir
     }
 
     if (!hasAccess) {
-        return <Navigate to="/dashboard" state={{ from: location }} replace />;
+        return <Navigate to="/profile" state={{ from: location }} replace />;
     }
 
     return <>{children}</>;
