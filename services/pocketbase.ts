@@ -22,6 +22,7 @@ export const POCKETBASE_URL = normalizeUrl(shouldUseFallbackDomain ? defaultUrl 
 
 export const pb = new PocketBase(POCKETBASE_URL);
 pb.autoCancellation(false);
+export const AUTH_COLLECTION = 'users';
 
 let currentToken = pb.authStore.token || '';
 let currentModel: RecordModel | null = (pb.authStore.model as RecordModel | null) ?? null;
@@ -48,7 +49,7 @@ const refreshInitialAuth = async () => {
   }
 
   try {
-    const authData = await pb.collection('staff_users').authRefresh();
+    const authData = await pb.collection(AUTH_COLLECTION).authRefresh();
     setCurrentAuth(authData.token, (authData.record as RecordModel | null) ?? null);
     return authData.record ?? null;
   } catch (error) {

@@ -26,6 +26,7 @@ const supabase = createClient(supabaseUrl, supabaseServiceRoleKey, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
 const pb = new PocketBase(pocketbaseUrl);
+const authCollectionName = 'users';
 
 await pb.collection('_superusers').authWithPassword(pocketbaseSuperuserEmail, pocketbaseSuperuserPassword);
 
@@ -39,15 +40,17 @@ if (usersError) fail(`Failed to count Supabase staff_users: ${usersError.message
 if (appStateError) fail(`Failed to count Supabase app_state: ${appStateError.message}`);
 if (appFilesError) fail(`Failed to count Supabase app_files: ${appFilesError.message}`);
 
-const [pocketbaseUsers, pocketbaseAppState, pocketbaseLandingAssets] = await Promise.all([
-  pb.collection('staff_users').getFullList({ fields: 'id' }),
+const [pocketbaseUsersResponse, pocketbaseAppState, pocketbaseLandingAssets] = await Promise.all([
+  pb.send(`/api/collections/${authCollectionName}/records?perPage=200&fields=id`, { method: 'GET' }),
   pb.collection('app_state').getFullList({ fields: 'id' }),
   pb.collection('landing_assets').getFullList({ fields: 'id' }),
 ]);
 
+const pocketbaseUsers = Array.isArray(pocketbaseUsersResponse?.items) ? pocketbaseUsersResponse.items : [];
+
 console.log('[validate:pocketbase-migration] Migration count summary');
 console.log(`- Supabase staff_users: ${supabaseUsers || 0}`);
-console.log(`- PocketBase staff_users: ${pocketbaseUsers.length}`);
+console.log(`- PocketBase ${authCollectionName}: ${pocketbaseUsers.length}`);
 console.log(`- Supabase app_state: ${supabaseAppState || 0}`);
 console.log(`- PocketBase app_state: ${pocketbaseAppState.length}`);
 console.log(`- Supabase app_files: ${supabaseAppFiles || 0}`);

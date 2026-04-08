@@ -16,14 +16,15 @@ if (!superuserEmail || !superuserPassword) {
 }
 
 const pb = new PocketBase(pocketbaseUrl);
+const authCollectionName = 'users';
 
-const elevatedRule = "@request.auth.collectionName = '_superusers' || (@request.auth.id != '' && @request.auth.collectionName = 'staff_users' && @request.auth.isSuperAdmin = true)";
-const selfOrSuperAdminRule = "@request.auth.collectionName = '_superusers' || @request.auth.id = id || (@request.auth.collectionName = 'staff_users' && @request.auth.isSuperAdmin = true)";
+const elevatedRule = `@request.auth.collectionName = '_superusers' || (@request.auth.id != '' && @request.auth.collectionName = '${authCollectionName}' && @request.auth.isSuperAdmin = true)`;
+const selfOrSuperAdminRule = `@request.auth.collectionName = '_superusers' || @request.auth.id = id || (@request.auth.collectionName = '${authCollectionName}' && @request.auth.isSuperAdmin = true)`;
 const publicAppStateRule = `${elevatedRule} || @request.auth.id != '' || (scope = 'global' && (key = 'aurora_landing_config' || key = 'aurora_census_survey_masters' || key = 'aurora_census_survey_cycles'))`;
 
 const collectionDefinitions = [
   {
-    name: 'staff_users',
+    name: authCollectionName,
     type: 'auth',
     listRule: elevatedRule,
     viewRule: selfOrSuperAdminRule,
@@ -45,7 +46,7 @@ const collectionDefinitions = [
       { name: 'legacySupabaseId', type: 'text', required: false, max: 80 },
     ],
     indexes: [
-      'CREATE UNIQUE INDEX idx_staff_users_legacy_supabase_id ON staff_users (legacySupabaseId) WHERE legacySupabaseId != ""',
+      `CREATE UNIQUE INDEX idx_${authCollectionName}_legacy_supabase_id ON ${authCollectionName} (legacySupabaseId) WHERE legacySupabaseId != ""`,
     ],
     passwordAuth: {
       enabled: true,
@@ -106,7 +107,34 @@ const upsertCollection = async (definition) => {
   }
 };
 
+const renameLegacyAuthCollectionIfNeeded = async () => {
+  try {
+    const existingUsers = await pb.collections.getOne(authCollectionName);
+    return existingUsers;
+  } catch (error) {
+    if (Number(error?.status || error?.response?.status || 0) !== 404) {
+      throw error;
+    }
+  }
+
+  try {
+    const legacy = await pb.collections.getOne('staff_users');
+    const renamed = await pb.collections.update(legacy.id, {
+      ...legacy,
+      name: authCollectionName,
+    });
+    console.log(`[pocketbase:bootstrap] renamed staff_users to ${authCollectionName}`);
+    return renamed;
+  } catch (error) {
+    if (Number(error?.status || error?.response?.status || 0) === 404) {
+      return null;
+    }
+    throw error;
+  }
+};
+
 await pb.collection('_superusers').authWithPassword(superuserEmail, superuserPassword);
+await renameLegacyAuthCollectionIfNeeded();
 
 for (const definition of collectionDefinitions) {
   await upsertCollection(definition);

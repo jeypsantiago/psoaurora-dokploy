@@ -1,6 +1,7 @@
 import type { RecordModel } from 'pocketbase';
 import { deleteLandingAssetBySource } from './mediaAssets';
 import {
+  AUTH_COLLECTION,
   pb,
   getCurrentAuthRecord,
   getCurrentUserId,
@@ -139,7 +140,7 @@ const syncAuthRecordFromStore = async () => {
   }
 
   try {
-    const fresh = await pb.collection('staff_users').getOne(String(authRecord.id));
+    const fresh = await pb.collection(AUTH_COLLECTION).getOne(String(authRecord.id));
     setCurrentAuth(currentToken, mapStaffUserRecord(fresh));
   } catch (error) {
     console.error('Failed to hydrate PocketBase auth record.', error);
@@ -228,7 +229,7 @@ const buildStaffUserFormData = (payload: UserMutationPayload, includePassword = 
 
 const fetchStaffUserRecord = async (userId: string) => {
   try {
-    return await pb.collection('staff_users').getOne(userId);
+    return await pb.collection(AUTH_COLLECTION).getOne(userId);
   } catch (error) {
     throwBackendError(error, 'Unable to load staff user.');
     return null;
@@ -243,7 +244,7 @@ subscribeToAuth(() => {
 const staffUsersCollection = {
   async getFullList(options?: { sort?: string }) {
     try {
-      const records = await pb.collection('staff_users').getFullList({
+      const records = await pb.collection(AUTH_COLLECTION).getFullList({
         sort: options?.sort === 'name' ? 'name' : undefined,
       });
       return records.map((record) => mapStaffUserRecord(record));
@@ -273,7 +274,7 @@ const staffUsersCollection = {
         formData.set('passwordConfirm', generatedPassword);
       }
 
-      const created = await pb.collection('staff_users').create(formData);
+      const created = await pb.collection(AUTH_COLLECTION).create(formData);
       return mapStaffUserRecord(created);
     } catch (error) {
       throwBackendError(error, 'Unable to create staff user.');
@@ -284,7 +285,7 @@ const staffUsersCollection = {
   async update(id: string, payload: UserMutationPayload, _options?: UserMutationOptions) {
     try {
       const formData = buildStaffUserFormData(payload, true);
-      const updated = await pb.collection('staff_users').update(id, formData);
+      const updated = await pb.collection(AUTH_COLLECTION).update(id, formData);
 
       const mapped = mapStaffUserRecord(updated);
       if (getCurrentUserId() === id) {
@@ -301,7 +302,7 @@ const staffUsersCollection = {
 
   async delete(id: string) {
     try {
-      await pb.collection('staff_users').delete(id);
+      await pb.collection(AUTH_COLLECTION).delete(id);
     } catch (error) {
       throwBackendError(error, 'Unable to delete staff user.');
     }
@@ -309,7 +310,7 @@ const staffUsersCollection = {
 
   async authWithPassword(identity: string, secret: string) {
     try {
-      const authData = await pb.collection('staff_users').authWithPassword(identity, secret);
+      const authData = await pb.collection(AUTH_COLLECTION).authWithPassword(identity, secret);
       const mapped = mapStaffUserRecord(authData.record);
       setCurrentAuth(authData.token, mapped);
       return {

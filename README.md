@@ -36,7 +36,7 @@ This repo now targets self-hosted PocketBase for auth, app state, and media stor
 
 The app uses:
 
-- auth collection `staff_users`
+- auth collection `users`
 - base collection `app_state`
 - base collection `landing_assets`
 
@@ -58,6 +58,16 @@ Then validate counts:
 
 ```powershell
 npm run validate:pocketbase-migration
+```
+
+If you have an older PocketBase setup where users were imported into `staff_users`, move them into `users` with:
+
+```powershell
+$env:POCKETBASE_URL="http://127.0.0.1:8090"
+$env:POCKETBASE_SUPERUSER_EMAIL="admin@example.com"
+$env:POCKETBASE_SUPERUSER_PASSWORD="your-password"
+$env:POCKETBASE_TEMP_PASSWORD="ChangeMe123!"
+npm run migrate:pb-staff-users-to-users
 ```
 
 ## Password Recovery

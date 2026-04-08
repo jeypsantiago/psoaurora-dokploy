@@ -27,6 +27,7 @@ const supabase = createClient(supabaseUrl, supabaseServiceRoleKey, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
 const pb = new PocketBase(pocketbaseUrl);
+const authCollectionName = 'users';
 
 const asArray = (value) => {
   if (Array.isArray(value)) return value.map((entry) => String(entry)).filter(Boolean);
@@ -106,7 +107,7 @@ const getByLegacyId = async (collectionName, legacySupabaseId) => {
 const getUserByEmail = async (email) => {
   if (!email) return null;
   try {
-    return await pb.collection('staff_users').getFirstListItem(pb.filter('email = {:email}', { email }));
+    return await pb.collection(authCollectionName).getFirstListItem(pb.filter('email = {:email}', { email }));
   } catch (error) {
     if (Number(error?.status || error?.response?.status || 0) === 404) {
       return null;
@@ -147,14 +148,14 @@ const upsertStaffUser = async (row) => {
     if (signatureFile) formData.append('signature', signatureFile);
   }
 
-  const existing = await getByLegacyId('staff_users', String(row.id || '')) || await getUserByEmail(email);
+  const existing = await getByLegacyId(authCollectionName, String(row.id || '')) || await getUserByEmail(email);
   if (existing) {
-    const updated = await pb.collection('staff_users').update(existing.id, formData);
+    const updated = await pb.collection(authCollectionName).update(existing.id, formData);
     console.log(`[migrate:to-pocketbase] updated user ${email}`);
     return updated;
   }
 
-  const created = await pb.collection('staff_users').create(formData);
+  const created = await pb.collection(authCollectionName).create(formData);
   console.log(`[migrate:to-pocketbase] created user ${email}`);
   return created;
 };
