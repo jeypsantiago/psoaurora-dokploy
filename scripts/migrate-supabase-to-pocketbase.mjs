@@ -82,6 +82,15 @@ const downloadAsFile = async (url, fallbackName) => {
   });
 };
 
+const tryDownloadAsFile = async (url, fallbackName, contextLabel) => {
+  try {
+    return await downloadAsFile(url, fallbackName);
+  } catch (error) {
+    console.warn(`[migrate:to-pocketbase] skipped ${contextLabel}: ${error.message}`);
+    return null;
+  }
+};
+
 const getByLegacyId = async (collectionName, legacySupabaseId) => {
   if (!legacySupabaseId) return null;
   try {
@@ -129,21 +138,13 @@ const upsertStaffUser = async (row) => {
   formData.append('legacySupabaseId', String(row.id || ''));
 
   if (row.avatar_url) {
-    try {
-      const avatarFile = await downloadAsFile(row.avatar_url, `${email}-avatar`);
-      if (avatarFile) formData.append('avatar', avatarFile);
-    } catch (error) {
-      console.warn(`[migrate:to-pocketbase] avatar download skipped for ${email}: ${error.message}`);
-    }
+    const avatarFile = await tryDownloadAsFile(row.avatar_url, `${email}-avatar`, `avatar for ${email}`);
+    if (avatarFile) formData.append('avatar', avatarFile);
   }
 
   if (row.signature_url) {
-    try {
-      const signatureFile = await downloadAsFile(row.signature_url, `${email}-signature`);
-      if (signatureFile) formData.append('signature', signatureFile);
-    } catch (error) {
-      console.warn(`[migrate:to-pocketbase] signature download skipped for ${email}: ${error.message}`);
-    }
+    const signatureFile = await tryDownloadAsFile(row.signature_url, `${email}-signature`, `signature for ${email}`);
+    if (signatureFile) formData.append('signature', signatureFile);
   }
 
   const existing = await getByLegacyId('staff_users', String(row.id || '')) || await getUserByEmail(email);
@@ -176,7 +177,7 @@ const findAppStateRecord = async (scope, ownerId, key) => {
 };
 
 const uploadLandingAsset = async (sourceUrl, kind, label, ownerId) => {
-  const file = await downloadAsFile(sourceUrl, label);
+  const file = await tryDownloadAsFile(sourceUrl, label, `landing asset ${label}`);
   if (!file) return sourceUrl;
 
   const formData = new FormData();

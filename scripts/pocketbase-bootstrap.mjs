@@ -17,19 +17,19 @@ if (!superuserEmail || !superuserPassword) {
 
 const pb = new PocketBase(pocketbaseUrl);
 
-const publicAppStateRule = "@request.auth.id != '' || (scope = 'global' && (key = 'aurora_landing_config' || key = 'aurora_census_survey_masters' || key = 'aurora_census_survey_cycles'))";
-const superAdminRule = "@request.auth.id != '' && @request.auth.collectionName = 'staff_users' && @request.auth.isSuperAdmin = true";
-const selfOrSuperAdminRule = "@request.auth.id = id || (@request.auth.collectionName = 'staff_users' && @request.auth.isSuperAdmin = true)";
+const elevatedRule = "@request.auth.collectionName = '_superusers' || (@request.auth.id != '' && @request.auth.collectionName = 'staff_users' && @request.auth.isSuperAdmin = true)";
+const selfOrSuperAdminRule = "@request.auth.collectionName = '_superusers' || @request.auth.id = id || (@request.auth.collectionName = 'staff_users' && @request.auth.isSuperAdmin = true)";
+const publicAppStateRule = `${elevatedRule} || @request.auth.id != '' || (scope = 'global' && (key = 'aurora_landing_config' || key = 'aurora_census_survey_masters' || key = 'aurora_census_survey_cycles'))`;
 
 const collectionDefinitions = [
   {
     name: 'staff_users',
     type: 'auth',
-    listRule: superAdminRule,
+    listRule: elevatedRule,
     viewRule: selfOrSuperAdminRule,
-    createRule: superAdminRule,
+    createRule: elevatedRule,
     updateRule: selfOrSuperAdminRule,
-    deleteRule: superAdminRule,
+    deleteRule: elevatedRule,
     manageRule: selfOrSuperAdminRule,
     fields: [
       { name: 'name', type: 'text', required: true, max: 120 },
@@ -57,9 +57,9 @@ const collectionDefinitions = [
     type: 'base',
     listRule: publicAppStateRule,
     viewRule: publicAppStateRule,
-    createRule: "@request.auth.id != ''",
-    updateRule: "@request.auth.id != ''",
-    deleteRule: "@request.auth.id != ''",
+    createRule: "@request.auth.collectionName = '_superusers' || @request.auth.id != ''",
+    updateRule: "@request.auth.collectionName = '_superusers' || @request.auth.id != ''",
+    deleteRule: "@request.auth.collectionName = '_superusers' || @request.auth.id != ''",
     fields: [
       { name: 'key', type: 'text', required: true, max: 160 },
       { name: 'scope', type: 'select', required: true, maxSelect: 1, values: ['global', 'user'] },
@@ -75,9 +75,9 @@ const collectionDefinitions = [
     type: 'base',
     listRule: 'id != ""',
     viewRule: 'id != ""',
-    createRule: superAdminRule,
-    updateRule: superAdminRule,
-    deleteRule: superAdminRule,
+    createRule: elevatedRule,
+    updateRule: elevatedRule,
+    deleteRule: elevatedRule,
     fields: [
       { name: 'label', type: 'text', required: false, max: 180 },
       { name: 'kind', type: 'text', required: false, max: 80 },
