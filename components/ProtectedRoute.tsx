@@ -35,15 +35,6 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requir
         }
 
         deniedRouteKeyRef.current = deniedRouteKey;
-        console.warn('[ProtectedRoute] denied route access', {
-            path: location.pathname,
-            requiredPermission: requires,
-            currentUserId: currentUser.id,
-            currentUserEmail: currentUser.email,
-            currentUserRoles: currentUser.roles,
-            currentUserIsSuperAdmin: currentUser.isSuperAdmin,
-            hasAccess,
-        });
         void alert("Access Denied: You do not have the required permissions to view this page.");
     }, [alert, currentUser, deniedRouteKey, hasAccess, isReady, location.pathname, requires]);
 

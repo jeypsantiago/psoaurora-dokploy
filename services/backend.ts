@@ -72,7 +72,7 @@ const firstFileName = (value: unknown): string => {
   return '';
 };
 
-const mapStaffUserRecord = (row: AnyRecord | null): AnyRecord | null => {
+const mapUserRecord = (row: AnyRecord | null): AnyRecord | null => {
   if (!row) return null;
 
   const avatarFile = firstFileName(row.avatar);
@@ -141,10 +141,10 @@ const syncAuthRecordFromStore = async () => {
 
   try {
     const fresh = await pb.collection(AUTH_COLLECTION).getOne(String(authRecord.id));
-    setCurrentAuth(currentToken, mapStaffUserRecord(fresh));
+    setCurrentAuth(currentToken, mapUserRecord(fresh));
   } catch (error) {
     console.error('Failed to hydrate PocketBase auth record.', error);
-    setCurrentAuth(currentToken, mapStaffUserRecord(authRecord));
+    setCurrentAuth(currentToken, mapUserRecord(authRecord));
   }
 };
 
@@ -193,7 +193,7 @@ const normalizeUserPayload = (payload: UserMutationPayload, includePassword = tr
   };
 };
 
-const buildStaffUserFormData = (payload: UserMutationPayload, includePassword = true) => {
+const buildUserFormData = (payload: UserMutationPayload, includePassword = true) => {
   const normalized = normalizeUserPayload(payload, includePassword);
   const formData = new FormData();
 
@@ -229,11 +229,11 @@ const buildStaffUserFormData = (payload: UserMutationPayload, includePassword = 
   return formData;
 };
 
-const fetchStaffUserRecord = async (userId: string) => {
+const fetchUserRecord = async (userId: string) => {
   try {
     return await pb.collection(AUTH_COLLECTION).getOne(userId);
   } catch (error) {
-    throwBackendError(error, 'Unable to load staff user.');
+    throwBackendError(error, 'Unable to load user.');
     return null;
   }
 };
@@ -249,23 +249,23 @@ const usersCollection = {
       const records = await pb.collection(AUTH_COLLECTION).getFullList({
         sort: options?.sort === 'name' ? 'name' : undefined,
       });
-      return records.map((record) => mapStaffUserRecord(record));
+      return records.map((record) => mapUserRecord(record));
     } catch (error) {
-      throwBackendError(error, 'Unable to load staff users.');
+      throwBackendError(error, 'Unable to load users.');
       return [];
     }
   },
 
   async getOne(id: string) {
-    const row = await fetchStaffUserRecord(id);
-    if (!row) notFound('Staff user not found.');
-    return mapStaffUserRecord(row);
+    const row = await fetchUserRecord(id);
+    if (!row) notFound('User not found.');
+    return mapUserRecord(row);
   },
 
   async create(payload: UserMutationPayload, _options?: UserMutationOptions) {
     try {
       const normalized = normalizeUserPayload(payload, true);
-      const formData = buildStaffUserFormData({
+      const formData = buildUserFormData({
         ...payload,
         emailVisibility: true,
         verified: true,
@@ -279,19 +279,19 @@ const usersCollection = {
       }
 
       const created = await pb.collection(AUTH_COLLECTION).create(formData);
-      return mapStaffUserRecord(created);
+      return mapUserRecord(created);
     } catch (error) {
-      throwBackendError(error, 'Unable to create staff user.');
+      throwBackendError(error, 'Unable to create user.');
       return null;
     }
   },
 
   async update(id: string, payload: UserMutationPayload, _options?: UserMutationOptions) {
     try {
-      const formData = buildStaffUserFormData(payload, true);
+      const formData = buildUserFormData(payload, true);
       const updated = await pb.collection(AUTH_COLLECTION).update(id, formData);
 
-      const mapped = mapStaffUserRecord(updated);
+      const mapped = mapUserRecord(updated);
       if (getCurrentUserId() === id) {
         pb.authStore.save(pb.authStore.token, updated);
         setCurrentAuth(pb.authStore.token, mapped);
@@ -299,7 +299,7 @@ const usersCollection = {
 
       return mapped;
     } catch (error) {
-      throwBackendError(error, 'Unable to update staff user.');
+      throwBackendError(error, 'Unable to update user.');
       return null;
     }
   },
@@ -308,14 +308,14 @@ const usersCollection = {
     try {
       await pb.collection(AUTH_COLLECTION).delete(id);
     } catch (error) {
-      throwBackendError(error, 'Unable to delete staff user.');
+      throwBackendError(error, 'Unable to delete user.');
     }
   },
 
   async authWithPassword(identity: string, secret: string) {
     try {
       const authData = await pb.collection(AUTH_COLLECTION).authWithPassword(identity, secret);
-      const mapped = mapStaffUserRecord(authData.record);
+      const mapped = mapUserRecord(authData.record);
       setCurrentAuth(authData.token, mapped);
       return {
         token: authData.token,
