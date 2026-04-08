@@ -91,6 +91,9 @@ export const RbacProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const userPermissions = useMemo(() => {
     if (!currentUser) return [];
+    if (currentUser.isSuperAdmin || currentUser.roles.includes("Super Admin")) {
+      return ["all"];
+    }
     return getEffectivePermissions(roles, currentUser.roles);
   }, [currentUser, roles]);
 
