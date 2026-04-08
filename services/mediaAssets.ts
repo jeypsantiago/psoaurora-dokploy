@@ -175,8 +175,17 @@ export const isBackendFilePath = (value: string): boolean => {
 export const resolveMediaSource = (value: string): string => {
   const trimmed = value.trim();
   if (!trimmed) return '';
+  if (/^(data:|https?:\/\/)/i.test(trimmed)) {
+    return trimmed;
+  }
   if (trimmed.startsWith('/api/files/')) {
     return `${POCKETBASE_URL}${trimmed}`;
+  }
+  if (trimmed.startsWith('api/files/')) {
+    return `${POCKETBASE_URL}/${trimmed}`;
+  }
+  if (trimmed.startsWith('//')) {
+    return `https:${trimmed}`;
   }
   return trimmed;
 };
