@@ -17,7 +17,8 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requir
     const { alert } = useDialog();
     const location = useLocation();
 
-    const hasAccess = !requires || can(requires);
+    const isSuperAdmin = !!currentUser?.isSuperAdmin || !!currentUser?.roles?.includes('Super Admin');
+    const hasAccess = !requires || isSuperAdmin || can(requires);
 
     useEffect(() => {
         if (isReady && currentUser && !hasAccess) {
