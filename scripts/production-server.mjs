@@ -1,0 +1,173 @@
+#!/usr/bin/env node
+
+import http from 'node:http';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import PocketBase from 'pocketbase';
+import { getPocketBaseUrl, runReportReminders } from './report-reminder-core.mjs';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const rootDir = path.resolve(__dirname, '..');
+const distDir = path.resolve(rootDir, 'dist');
+const port = Number(process.env.PORT || 4173);
+const host = process.env.HOST || '0.0.0.0';
+
+const contentTypes = new Map([
+  ['.html', 'text/html; charset=utf-8'],
+  ['.js', 'text/javascript; charset=utf-8'],
+  ['.css', 'text/css; charset=utf-8'],
+  ['.json', 'application/json; charset=utf-8'],
+  ['.png', 'image/png'],
+  ['.jpg', 'image/jpeg'],
+  ['.jpeg', 'image/jpeg'],
+  ['.svg', 'image/svg+xml'],
+  ['.ico', 'image/x-icon'],
+  ['.woff', 'font/woff'],
+  ['.woff2', 'font/woff2'],
+]);
+
+const sendJson = (res, statusCode, payload) => {
+  res.writeHead(statusCode, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Cache-Control': 'no-store',
+  });
+  res.end(JSON.stringify(payload));
+};
+
+const readJsonBody = async (req) => {
+  const chunks = [];
+  for await (const chunk of req) {
+    chunks.push(chunk);
+    if (Buffer.concat(chunks).length > 1024 * 1024) {
+      throw new Error('Request body is too large.');
+    }
+  }
+  const text = Buffer.concat(chunks).toString('utf8').trim();
+  return text ? JSON.parse(text) : {};
+};
+
+const getBearerToken = (req) => {
+  const header = typeof req.headers.authorization === 'string' ? req.headers.authorization : '';
+  const match = header.match(/^Bearer\s+(.+)$/i);
+  return match?.[1]?.trim() || '';
+};
+
+const verifySuperAdmin = async (token) => {
+  if (!token) {
+    return { ok: false, status: 401, message: 'Missing authorization token.' };
+  }
+
+  const pb = new PocketBase(getPocketBaseUrl());
+  pb.autoCancellation(false);
+  pb.authStore.save(token, null);
+
+  try {
+    const auth = await pb.collection('users').authRefresh();
+    const record = auth.record || {};
+    const roles = Array.isArray(record.roles) ? record.roles : [];
+    const isSuperAdmin = Boolean(record.isSuperAdmin || roles.includes('Super Admin'));
+    if (!isSuperAdmin) {
+      return { ok: false, status: 403, message: 'Only Super Admin users can send test reminders.' };
+    }
+    return { ok: true, token: auth.token };
+  } catch {
+    return { ok: false, status: 401, message: 'Invalid or expired authorization token.' };
+  }
+};
+
+const handleTestReminder = async (req, res) => {
+  let body;
+  try {
+    body = await readJsonBody(req);
+  } catch {
+    sendJson(res, 400, { ok: false, message: 'Invalid JSON payload.' });
+    return;
+  }
+
+  const reportId = typeof body.reportId === 'string' ? body.reportId.trim() : '';
+  if (!reportId) {
+    sendJson(res, 400, { ok: false, message: 'reportId is required.' });
+    return;
+  }
+
+  const auth = await verifySuperAdmin(getBearerToken(req));
+  if (!auth.ok) {
+    sendJson(res, auth.status, { ok: false, message: auth.message });
+    return;
+  }
+
+  try {
+    const result = await runReportReminders({
+      testMode: true,
+      targetReportId: reportId,
+      authenticate: true,
+      requireEnabled: false,
+    });
+
+    if (result.sent < 1) {
+      sendJson(res, 500, {
+        ok: false,
+        message: result.failed > 0
+          ? 'Test reminder failed. Check reminder log for details.'
+          : 'No reminder was sent for the selected report.',
+        result,
+      });
+      return;
+    }
+
+    sendJson(res, 200, { ok: true, message: 'Test reminder sent.', result });
+  } catch (error) {
+    sendJson(res, 500, {
+      ok: false,
+      message: error?.message || 'Unable to send test reminder.',
+    });
+  }
+};
+
+const serveStatic = async (req, res) => {
+  const rawPath = decodeURIComponent(new URL(req.url || '/', 'http://localhost').pathname);
+  const requestedPath = rawPath === '/' ? '/index.html' : rawPath;
+  const safePath = path.normalize(requestedPath).replace(/^(\.\.[/\\])+/, '');
+  let filePath = path.join(distDir, safePath);
+
+  try {
+    const stat = await fs.stat(filePath);
+    if (stat.isDirectory()) {
+      filePath = path.join(filePath, 'index.html');
+    }
+  } catch {
+    filePath = path.join(distDir, 'index.html');
+  }
+
+  try {
+    const data = await fs.readFile(filePath);
+    const ext = path.extname(filePath).toLowerCase();
+    res.writeHead(200, {
+      'Content-Type': contentTypes.get(ext) || 'application/octet-stream',
+      'Cache-Control': ext === '.html' ? 'no-store' : 'public, max-age=31536000, immutable',
+    });
+    res.end(data);
+  } catch {
+    sendJson(res, 404, { ok: false, message: 'Not found.' });
+  }
+};
+
+const server = http.createServer(async (req, res) => {
+  if (req.method === 'POST' && req.url === '/api/report-reminders/test') {
+    await handleTestReminder(req, res);
+    return;
+  }
+
+  if (req.method === 'GET' || req.method === 'HEAD') {
+    await serveStatic(req, res);
+    return;
+  }
+
+  sendJson(res, 405, { ok: false, message: 'Method not allowed.' });
+});
+
+server.listen(port, host, () => {
+  console.log(`Aurora production server listening at http://${host}:${port}`);
+});

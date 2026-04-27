@@ -32,6 +32,11 @@ export const STORAGE_KEYS = {
   employmentFocalPersons: 'employment_focalPersons',
   employmentDesignations: 'employment_designations',
 
+  reportProjects: 'aurora_report_projects',
+  reportSubmissions: 'aurora_report_submissions',
+  reportSettings: 'aurora_report_settings',
+  reportReminderLog: 'aurora_report_reminder_log',
+
   propertyRegistryView: 'property_registry_view',
   propertyConfig: 'aurora_property_config',
   propertyCategories: 'aurora_property_categories',

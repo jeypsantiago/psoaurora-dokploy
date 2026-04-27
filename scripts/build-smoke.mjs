@@ -32,4 +32,18 @@ if (!fs.existsSync(bundlePath)) {
   fail(`Referenced entry bundle does not exist: ${bundleMatch[1]}`);
 }
 
+const assetDir = path.join(distDir, 'assets');
+const assets = fs.existsSync(assetDir) ? fs.readdirSync(assetDir) : [];
+const requiredLazyChunks = [
+  /^ReportMonitoringPage-.+\.js$/,
+  /^ReportMonitoringSettingsTab-.+\.js$/,
+  /^reportMonitoring-.+\.js$/,
+];
+
+for (const matcher of requiredLazyChunks) {
+  if (!assets.some((asset) => matcher.test(asset))) {
+    fail(`Missing expected report monitoring production chunk: ${matcher}`);
+  }
+}
+
 console.log(`[smoke:build] PASS Found production bundle ${bundleMatch[1]}`);

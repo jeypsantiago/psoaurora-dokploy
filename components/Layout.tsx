@@ -81,6 +81,17 @@ const SIDEBAR_CHILDREN_BY_ROUTE: Record<string, SidebarChildItem[]> = {
     { id: "inventory", label: "Inventory Count", permission: "property.count" },
     { id: "audit", label: "Audit Trail", permission: "property.audit" },
   ],
+  "/reports": [
+    { id: "projects", label: "Projects", permission: "reports.view" },
+    { id: "all", label: "All Reports", permission: "reports.view" },
+    { id: "due-soon", label: "Due Soon", permission: "reports.view" },
+    {
+      id: "settings",
+      label: "Settings",
+      permission: "reports.reminders",
+      action: "settings",
+    },
+  ],
   "/settings": [
     { id: "record", label: "Record Settings", permission: "settings.view" },
     { id: "supply", label: "Supply Settings", permission: "settings.view" },
@@ -90,6 +101,11 @@ const SIDEBAR_CHILDREN_BY_ROUTE: Record<string, SidebarChildItem[]> = {
       permission: "settings.view",
     },
     { id: "property", label: "Property Settings", permission: "settings.view" },
+    {
+      id: "reports",
+      label: "Report Settings",
+      permission: "settings.view",
+    },
     { id: "users", label: "User Management", permission: "settings.view" },
     { id: "gmail", label: "Gmail Settings", permission: "settings.view" },
     { id: "portal", label: "Portal Config", permission: "settings.view" },
@@ -138,6 +154,16 @@ const SIDEBAR_QUICK_ACTIONS_BY_ROUTE: Record<string, SidebarQuickAction[]> = {
       action: "register-asset",
       permission: "property.register",
       variant: "primary",
+    },
+  ],
+  "/reports": [
+    {
+      label: "New Report",
+      tabId: "all",
+      action: "new-report",
+      permission: "reports.edit",
+      variant: "primary",
+      icon: Plus,
     },
   ],
 };

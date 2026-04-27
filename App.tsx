@@ -49,6 +49,11 @@ const RecordPage = lazy(() =>
     default: module.RecordPage,
   })),
 );
+const ReportMonitoringPage = lazy(() =>
+  import("./pages/ReportMonitoringPage").then((module) => ({
+    default: module.ReportMonitoringPage,
+  })),
+);
 const SettingsPage = lazy(() =>
   import("./pages/SettingsPage").then((module) => ({
     default: module.SettingsPage,
@@ -115,6 +120,11 @@ const PROTECTED_LAYOUT_ROUTES: ProtectedLayoutRouteConfig[] = [
     requires: "gmail.view",
     element: <GmailHub />,
     requiresGoogleAuth: true,
+  },
+  {
+    path: "/reports",
+    requires: "reports.view",
+    element: <ReportMonitoringPage />,
   },
   { path: "/property", requires: "property.view", element: <PropertyPage /> },
   { path: "/census", requires: "census.view", element: <CensusPage /> },
