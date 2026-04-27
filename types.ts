@@ -68,6 +68,59 @@ export interface EmploymentConfig {
   startNumber: number;
 }
 
+export type ReportFrequency = 'monthly' | 'quarterly' | 'annually';
+
+export interface ReportProject {
+  id: string;
+  name: string;
+  focalUserId: string;
+  defaultFrequency: ReportFrequency;
+  active: boolean;
+  reminderLeadDays?: number | null;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ReportSubmission {
+  id: string;
+  projectId: string;
+  title: string;
+  period: string;
+  frequency: ReportFrequency;
+  deadline: string;
+  submittedDate?: string;
+  reminderLeadDays?: number | null;
+  remarks?: string;
+  seriesId?: string;
+  periodStart?: string;
+  periodEnd?: string;
+  sequence?: number;
+  archived?: boolean;
+  generatedFromReportId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ReportReminderSettings {
+  enabled: boolean;
+  defaultLeadDays: number;
+  dailyCheckTime: string;
+  subjectTemplate: string;
+  bodyTemplate: string;
+}
+
+export interface ReportReminderLog {
+  id: string;
+  reportId: string;
+  projectId: string;
+  focalUserId: string;
+  focalEmail: string;
+  sentAt: string;
+  status: 'sent' | 'failed' | 'skipped' | 'manual-test';
+  errorMessage?: string;
+}
+
 export type Permission =
   | 'all'
   | 'dashboard.view'
@@ -76,6 +129,7 @@ export type Permission =
   | 'property.view' | 'property.edit' | 'property.register' | 'property.issue'
   | 'property.transfer' | 'property.count' | 'property.audit' | 'property.export'
   | 'employment.view' | 'employment.edit' | 'employment.delete' | 'employment.export'
+  | 'reports.view' | 'reports.edit' | 'reports.delete' | 'reports.reminders' | 'reports.export'
   | 'census.view' | 'census.edit'
   | 'gmail.view' | 'gmail.send'
   | 'settings.view' | 'settings.users' | 'settings.roles' | 'settings.data';
@@ -86,6 +140,7 @@ export const PERMISSION_GROUPS = {
   'Supply': ['supply.view', 'supply.request', 'supply.approve', 'supply.export', 'supply.inventory'],
   'Property': ['property.view', 'property.edit', 'property.register', 'property.issue', 'property.transfer', 'property.count', 'property.audit', 'property.export'],
   'Employment': ['employment.view', 'employment.edit', 'employment.delete', 'employment.export'],
+  'Report Monitoring': ['reports.view', 'reports.edit', 'reports.delete', 'reports.reminders', 'reports.export'],
   'Census & Surveys': ['census.view', 'census.edit'],
   'Gmail': ['gmail.view', 'gmail.send'],
   'Settings': ['settings.view', 'settings.users', 'settings.roles', 'settings.data'],
@@ -97,6 +152,7 @@ export const NAV_PERMISSION_MAP: Record<string, Permission> = {
   '/supplies': 'supply.view',
   '/property': 'property.view',
   '/employment': 'employment.view',
+  '/reports': 'reports.view',
   '/census': 'census.view',
   '/gmail': 'gmail.view',
   '/settings': 'settings.view',
@@ -130,6 +186,12 @@ export const PERMISSION_DESCRIPTIONS: Record<Permission, string> = {
   'employment.edit': 'Add or edit new employee contracts.',
   'employment.delete': 'Remove employment contract records.',
   'employment.export': 'Generate and download Certificate of Employment (COE) PDFs.',
+
+  'reports.view': 'View report monitoring projects, deadlines, and submission status.',
+  'reports.edit': 'Create and update report projects and report submission schedules.',
+  'reports.delete': 'Remove report projects and report submission records.',
+  'reports.reminders': 'Configure and run report deadline email reminders.',
+  'reports.export': 'Export report monitoring lists and status summaries.',
 
   'census.view': 'View the Census & Surveys monitoring dashboard and activity tracker.',
   'census.edit': 'Create activities, manage active cycles, and update progress in Census & Surveys.',

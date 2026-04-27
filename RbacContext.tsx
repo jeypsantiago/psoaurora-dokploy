@@ -8,6 +8,7 @@ import {
   Settings,
   Briefcase,
   ClipboardList,
+  ClipboardCheck,
 } from "lucide-react";
 import { useUsers } from "./UserContext";
 import { Permission } from "./types";
@@ -57,6 +58,12 @@ export const ALL_NAV_ITEMS: NavItem[] = [
     href: "/employment",
     icon: Briefcase,
     requiredPermission: "employment.view",
+  },
+  {
+    label: "Report Monitoring",
+    href: "/reports",
+    icon: ClipboardCheck,
+    requiredPermission: "reports.view",
   },
   {
     label: "Property",

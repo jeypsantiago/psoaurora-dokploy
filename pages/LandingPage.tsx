@@ -258,22 +258,10 @@ export const LandingPage: React.FC = () => {
   const [lastCensusSnapshotSyncAt, setLastCensusSnapshotSyncAt] = useState<
     number | null
   >(null);
-  const [failedTeamImages, setFailedTeamImages] = useState<
-    Record<string, boolean>
-  >({});
-  const [teamPanelLayout, setTeamPanelLayout] = useState<{
-    memberId: string;
-    placement: "left" | "right";
-    top: number;
-    left: number;
-    width: number;
-    maxHeight: number;
-  } | null>(null);
   const teamCardRefs = useRef<Record<string, HTMLElement | null>>({});
   const teamCardButtonRefs = useRef<Record<string, HTMLButtonElement | null>>(
     {},
   );
-  const teamPanelRef = useRef<HTMLDivElement | null>(null);
   const censusModalRef = useRef<HTMLDivElement | null>(null);
   const censusModalCloseTimeoutRef = useRef<number | null>(null);
   const navStateFrameRef = useRef<number | null>(null);
@@ -1041,23 +1029,18 @@ export const LandingPage: React.FC = () => {
       </div>
 
       <Suspense fallback={<LandingSectionFallback label="team section" />}>
-        <LandingTeamSection
-          teamTitle={config.team.title}
-          teamSubtitle={config.team.subtitle}
-          teamEntries={teamEntries}
-          pinnedTeamMemberId={pinnedTeamMemberId}
-          setPinnedTeamMemberId={setPinnedTeamMemberId}
-          hoveredTeamMemberId={hoveredTeamMemberId}
-          setHoveredTeamMemberId={setHoveredTeamMemberId}
-          teamPanelLayout={teamPanelLayout}
-          setTeamPanelLayout={setTeamPanelLayout}
-          teamCardRefs={teamCardRefs}
-          teamCardButtonRefs={teamCardButtonRefs}
-          teamPanelRef={teamPanelRef}
-          failedTeamImages={failedTeamImages}
-          setFailedTeamImages={setFailedTeamImages}
-          resetTeamCardStyle={resetTeamCardMotion}
-        />
+          <LandingTeamSection
+            teamTitle={config.team.title}
+            teamSubtitle={config.team.subtitle}
+            teamEntries={teamEntries}
+            pinnedTeamMemberId={pinnedTeamMemberId}
+            setPinnedTeamMemberId={setPinnedTeamMemberId}
+            hoveredTeamMemberId={hoveredTeamMemberId}
+            setHoveredTeamMemberId={setHoveredTeamMemberId}
+            teamCardRefs={teamCardRefs}
+            teamCardButtonRefs={teamCardButtonRefs}
+            resetTeamCardStyle={resetTeamCardMotion}
+          />
       </Suspense>
       <Suspense fallback={<LandingSectionFallback label="census board" />}>
         <LandingCensusSection

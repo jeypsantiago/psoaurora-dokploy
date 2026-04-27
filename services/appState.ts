@@ -24,6 +24,11 @@ const APP_STATE_SCOPE_MAP: Record<string, AppStateScope> = {
   [STORAGE_KEYS.employmentFocalPersons]: 'global',
   [STORAGE_KEYS.employmentDesignations]: 'global',
 
+  [STORAGE_KEYS.reportProjects]: 'global',
+  [STORAGE_KEYS.reportSubmissions]: 'global',
+  [STORAGE_KEYS.reportSettings]: 'global',
+  [STORAGE_KEYS.reportReminderLog]: 'global',
+
   [STORAGE_KEYS.propertyConfig]: 'global',
   [STORAGE_KEYS.propertyCategories]: 'global',
   [STORAGE_KEYS.propertyAssets]: 'global',

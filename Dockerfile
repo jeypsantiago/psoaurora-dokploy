@@ -10,12 +10,14 @@ COPY . .
 # Build the static files
 RUN npm run build
 
-# Stage 2: Serve the app with a lightweight Nginx web server
-FROM nginx:alpine
-# Configure SPA fallback for BrowserRouter routes.
-COPY nginx/default.conf /etc/nginx/conf.d/default.conf
-# Copy the built files from the previous stage to Nginx
-COPY --from=builder /app/dist /usr/share/nginx/html
-# Expose port 80 for Traefik to route traffic to
+# Stage 2: Serve the app and production API with Node.js
+FROM node:20-alpine
+WORKDIR /app
+ENV NODE_ENV=production
+ENV PORT=80
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/scripts ./scripts
+COPY --from=builder /app/package*.json ./
+COPY --from=builder /app/node_modules ./node_modules
 EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["node", "scripts/production-server.mjs"]

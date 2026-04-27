@@ -25,6 +25,7 @@ import {
   RefreshCw,
   Briefcase,
   Monitor,
+  ClipboardCheck,
 } from "lucide-react";
 import {
   Card,
@@ -40,7 +41,9 @@ import {
   Permission,
   PERMISSION_DESCRIPTIONS,
   EmploymentConfig,
+  ReportReminderSettings,
 } from "../types";
+import { DEFAULT_REPORT_REMINDER_SETTINGS } from "../services/reportMonitoring";
 import { useGoogleAuth } from "../components/GoogleAuthProvider";
 import { useGoogleLogin } from "@react-oauth/google";
 import { useToast } from "../ToastContext";
@@ -85,6 +88,8 @@ const loadSupplySettingsTab = () => import("./settings/SupplySettingsTab");
 const loadEmploymentSettingsTab = () =>
   import("./settings/EmploymentSettingsTab");
 const loadPropertySettingsTab = () => import("./settings/PropertySettingsTab");
+const loadReportMonitoringSettingsTab = () =>
+  import("./settings/ReportMonitoringSettingsTab");
 const loadGmailHubTab = () =>
   import("./settings/GmailHubTab").then((module) => ({
     default: module.GmailHubTab,
@@ -103,6 +108,7 @@ const RecordSettingsTab = lazy(loadRecordSettingsTab);
 const SupplySettingsTab = lazy(loadSupplySettingsTab);
 const EmploymentSettingsTab = lazy(loadEmploymentSettingsTab);
 const PropertySettingsTab = lazy(loadPropertySettingsTab);
+const ReportMonitoringSettingsTab = lazy(loadReportMonitoringSettingsTab);
 const GmailHubTab = lazy(loadGmailHubTab);
 const PortalConfigurationTab = lazy(loadPortalConfigurationTab);
 const ConnectivityTab = lazy(loadConnectivityTab);
@@ -112,6 +118,7 @@ const SETTINGS_TAB_PREFETCHERS: Record<string, () => void> = {
   supply: () => void loadSupplySettingsTab(),
   employment: () => void loadEmploymentSettingsTab(),
   property: () => void loadPropertySettingsTab(),
+  reports: () => void loadReportMonitoringSettingsTab(),
   users: () => void loadSecurityAccessTab(),
   gmail: () => void loadGmailHubTab(),
   portal: () => void loadPortalConfigurationTab(),
@@ -493,6 +500,7 @@ export const SettingsPage: React.FC = () => {
         "supply",
         "employment",
         "property",
+        "reports",
         "users",
         "gmail",
         "portal",
@@ -543,6 +551,14 @@ export const SettingsPage: React.FC = () => {
   const [usersSubTab, setUsersSubTab] = useState("accounts");
   const [employmentSubTab, setEmploymentSubTab] = useState("config");
   const [propertySubTab, setPropertySubTab] = useState("numbering");
+
+  const [reportSettings, setReportSettings] = useState<ReportReminderSettings>(
+    () =>
+      readStorageJsonSafe<ReportReminderSettings>(
+        STORAGE_KEYS.reportSettings,
+        DEFAULT_REPORT_REMINDER_SETTINGS,
+      ),
+  );
 
   // -- State for Registry Settings --
   const [docTypes, setDocTypes] = useState<DocType[]>(() =>
@@ -701,6 +717,10 @@ export const SettingsPage: React.FC = () => {
   useEffect(() => {
     writeStorageJson(STORAGE_KEYS.gmailWhitelist, whitelist);
   }, [whitelist]);
+
+  useEffect(() => {
+    writeStorageJson(STORAGE_KEYS.reportSettings, reportSettings);
+  }, [reportSettings]);
 
   useEffect(() => {
     writeStorageJson(STORAGE_KEYS.recordDocTypes, docTypes);
@@ -2737,6 +2757,10 @@ export const SettingsPage: React.FC = () => {
         [STORAGE_KEYS.employmentFocalPersons]: JSON.stringify([]),
         [STORAGE_KEYS.employmentDesignations]: JSON.stringify([]),
 
+        [STORAGE_KEYS.reportProjects]: JSON.stringify([]),
+        [STORAGE_KEYS.reportSubmissions]: JSON.stringify([]),
+        [STORAGE_KEYS.reportReminderLog]: JSON.stringify([]),
+
         [STORAGE_KEYS.censusSurveyMasters]: JSON.stringify([]),
         [STORAGE_KEYS.censusSurveyCycles]: JSON.stringify([]),
 
@@ -2842,6 +2866,20 @@ export const SettingsPage: React.FC = () => {
         toast("success", "Employment records purged.");
         await alert("All employment records have been permanently deleted.");
       }
+    }
+  };
+
+  const handlePurgeReports = async () => {
+    if (
+      await confirm(
+        "CRITICAL: This will delete PERMANENTLY all Report Monitoring projects, report schedules, and reminder logs. Type 'PURGE' to confirm.",
+        { title: "Purge Report Monitoring Data", confirmLabel: "Purge" },
+      )
+    ) {
+      writeStorageJson(STORAGE_KEYS.reportProjects, []);
+      writeStorageJson(STORAGE_KEYS.reportSubmissions, []);
+      writeStorageJson(STORAGE_KEYS.reportReminderLog, []);
+      toast("warning", "Report Monitoring data purged.");
     }
   };
 
@@ -3239,6 +3277,7 @@ export const SettingsPage: React.FC = () => {
     { id: "supply", label: "Supply Settings", icon: Package },
     { id: "employment", label: "Employment Settings", icon: Briefcase },
     { id: "property", label: "Property Settings", icon: Building2 },
+    { id: "reports", label: "Report Monitoring", icon: ClipboardCheck },
     { id: "gmail", label: "Gmail Hub Settings", icon: Mail },
     { id: "users", label: "User Management", icon: Users },
     { id: "portal", label: "Portal Config", icon: Monitor },
@@ -3635,6 +3674,18 @@ export const SettingsPage: React.FC = () => {
                 addPropertyLocation={addPropertyLocation}
                 removePropertyLocation={removePropertyLocation}
                 handlePurgeProperty={handlePurgeProperty}
+              />
+            </Suspense>
+          )}
+
+          {activeTab === "reports" && (
+            <Suspense
+              fallback={<SettingsTabFallback label="Report monitoring reminders" />}
+            >
+              <ReportMonitoringSettingsTab
+                settings={reportSettings}
+                setSettings={setReportSettings}
+                handlePurgeReports={handlePurgeReports}
               />
             </Suspense>
           )}

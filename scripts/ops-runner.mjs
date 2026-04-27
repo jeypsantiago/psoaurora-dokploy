@@ -19,6 +19,7 @@ const allowedOrigins = (process.env.AURORA_RUNNER_ALLOWED_ORIGINS
 const allowedCommandIds = [
   'health-public',
   'start-prod',
+  'report-reminders',
 ];
 
 const getNpmInvocation = (args) => {
@@ -213,13 +214,27 @@ const handleCommandExecution = async (commandId, payload = {}) => {
 
   const commandMap = {
     'health-public': ['run', 'health:public'],
+    'report-reminders': ['run', 'reports:reminders'],
   };
 
   const args = commandMap[commandId];
   const invocation = getNpmInvocation(args);
+  const env = {};
+  if (commandId === 'report-reminders') {
+    if (typeof payload.reportId === 'string' && payload.reportId.trim()) {
+      env.REPORT_REMINDER_REPORT_ID = payload.reportId.trim();
+    }
+    if (payload.testMode === true || payload.forceTest === true) {
+      env.REPORT_REMINDER_TEST_MODE = '1';
+    }
+    if (payload.dryRun === true) {
+      env.REPORT_REMINDERS_DRY_RUN = '1';
+    }
+  }
   const result = await runCommandCapture({
     command: invocation.command,
     args: invocation.args,
+    env,
   });
 
   return {
