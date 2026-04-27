@@ -83,7 +83,7 @@ export const ReportMonitoringSettingsTab: React.FC<ReportMonitoringSettingsTabPr
 
       <Card
         title="HTML Email Template"
-        description="Templates support {{projectName}}, {{reportTitle}}, {{period}}, {{deadline}}, {{focalPersonName}}, {{focalPersonEmail}}, and {{psaLogo}}"
+        description="Templates support {{projectName}}, {{reportTitle}}, {{period}}, {{deadline}}, {{daysRemaining}}, {{daysRemainingCount}}, {{focalPersonName}}, {{focalPersonEmail}}, and {{psaLogo}}"
       >
         <div className="space-y-4">
           <Input
