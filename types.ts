@@ -104,7 +104,9 @@ export interface ReportSubmission {
 
 export interface ReportReminderSettings {
   enabled: boolean;
+  dailyReminderEnabled: boolean;
   defaultLeadDays: number;
+  overdueReminderDays: number;
   dailyCheckTime: string;
   subjectTemplate: string;
   bodyTemplate: string;

@@ -9,7 +9,7 @@
     "check": "npm run lint && npm run typecheck && npm run build && npm run smoke:build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "start:prod": "node scripts/production-server.mjs",
+    "start:prod": "node --env-file=.env scripts/production-server.mjs",
     "ops:runner": "node scripts/ops-runner.mjs",
     "pocketbase:bootstrap": "node scripts/pocketbase-bootstrap.mjs",
     "migrate:to-pocketbase": "node scripts/migrate-supabase-to-pocketbase.mjs",

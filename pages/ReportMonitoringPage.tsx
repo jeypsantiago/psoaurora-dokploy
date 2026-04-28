@@ -24,6 +24,7 @@ import { Badge, Button, Card, Input, Modal } from "../components/ui";
 import { STORAGE_KEYS } from "../constants/storageKeys";
 import { useDialog } from "../DialogContext";
 import { useRbac } from "../RbacContext";
+import { upsertAppStateFromStorageValue } from "../services/appState";
 import { getAuthToken } from "../services/pocketbase";
 import {
   DEFAULT_REPORT_REMINDER_SETTINGS,
@@ -34,6 +35,7 @@ import {
   getReportLeadDays,
   getReportStatus,
   isReportHistoryRecord,
+  normalizeReportReminderSettings,
   normalizeReportSeries,
   REPORT_FREQUENCY_OPTIONS,
   type ReportStatus,
@@ -140,9 +142,11 @@ export const ReportMonitoringPage: React.FC = () => {
     ).reports,
   );
   const [settings] = useState<ReportReminderSettings>(() =>
-    readStorageJsonSafe<ReportReminderSettings>(
-      STORAGE_KEYS.reportSettings,
-      DEFAULT_REPORT_REMINDER_SETTINGS,
+    normalizeReportReminderSettings(
+      readStorageJsonSafe<ReportReminderSettings>(
+        STORAGE_KEYS.reportSettings,
+        DEFAULT_REPORT_REMINDER_SETTINGS,
+      ),
     ),
   );
   const [reminderLog, setReminderLog] = useState<ReportReminderLog[]>(() =>
@@ -574,6 +578,17 @@ export const ReportMonitoringPage: React.FC = () => {
     setManualSendingReportId(row.report.id);
     try {
       const token = await getAuthToken();
+      const latestSettings = readStorageJsonSafe<ReportReminderSettings>(
+        STORAGE_KEYS.reportSettings,
+        settings,
+      );
+      const normalizedSettings = normalizeReportReminderSettings(latestSettings);
+      const rawSettings = JSON.stringify(normalizedSettings);
+      writeStorageJson(STORAGE_KEYS.reportSettings, normalizedSettings);
+      await upsertAppStateFromStorageValue(
+        STORAGE_KEYS.reportSettings,
+        rawSettings,
+      );
       const response = await fetch("/api/report-reminders/test", {
         method: "POST",
         headers: {

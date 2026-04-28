@@ -43,7 +43,10 @@ import {
   EmploymentConfig,
   ReportReminderSettings,
 } from "../types";
-import { DEFAULT_REPORT_REMINDER_SETTINGS } from "../services/reportMonitoring";
+import {
+  DEFAULT_REPORT_REMINDER_SETTINGS,
+  normalizeReportReminderSettings,
+} from "../services/reportMonitoring";
 import { useGoogleAuth } from "../components/GoogleAuthProvider";
 import { useGoogleLogin } from "@react-oauth/google";
 import { useToast } from "../ToastContext";
@@ -553,11 +556,13 @@ export const SettingsPage: React.FC = () => {
   const [propertySubTab, setPropertySubTab] = useState("numbering");
 
   const [reportSettings, setReportSettings] = useState<ReportReminderSettings>(
-    () =>
-      readStorageJsonSafe<ReportReminderSettings>(
+    () => {
+      const savedSettings = readStorageJsonSafe<ReportReminderSettings>(
         STORAGE_KEYS.reportSettings,
         DEFAULT_REPORT_REMINDER_SETTINGS,
-      ),
+      );
+      return normalizeReportReminderSettings(savedSettings);
+    },
   );
 
   // -- State for Registry Settings --
@@ -719,7 +724,26 @@ export const SettingsPage: React.FC = () => {
   }, [whitelist]);
 
   useEffect(() => {
-    writeStorageJson(STORAGE_KEYS.reportSettings, reportSettings);
+    const normalizedSettings = normalizeReportReminderSettings(reportSettings);
+    if (
+      normalizedSettings.subjectTemplate !== reportSettings.subjectTemplate ||
+      normalizedSettings.bodyTemplate !== reportSettings.bodyTemplate
+    ) {
+      setReportSettings(normalizedSettings);
+      return;
+    }
+
+    writeStorageJson(STORAGE_KEYS.reportSettings, normalizedSettings);
+    const syncTimer = window.setTimeout(() => {
+      void upsertAppStateFromStorageValue(
+        STORAGE_KEYS.reportSettings,
+        JSON.stringify(normalizedSettings),
+      ).catch((error) => {
+        console.warn("Unable to sync report reminder settings to backend.", error);
+      });
+    }, 300);
+
+    return () => window.clearTimeout(syncTimer);
   }, [reportSettings]);
 
   useEffect(() => {

@@ -46,6 +46,34 @@ export const ReportMonitoringSettingsTab: React.FC<ReportMonitoringSettingsTabPr
             </button>
           </div>
 
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
+                <Mail size={18} />
+              </div>
+              <div>
+                <p className="text-sm font-black text-zinc-900 dark:text-white">
+                  Daily automatic reminders
+                </p>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                  Send at most one automatic reminder per report each day while it is due or overdue.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() =>
+                setSettings((prev) => ({
+                  ...prev,
+                  dailyReminderEnabled: !prev.dailyReminderEnabled,
+                }))
+              }
+              className={`w-12 h-6 rounded-full flex items-center px-1 transition-colors ${settings.dailyReminderEnabled ? "bg-emerald-600 justify-end" : "bg-zinc-300 dark:bg-zinc-700 justify-start"}`}
+              aria-label="Toggle daily automatic report reminders"
+            >
+              <div className="w-4 h-4 bg-white rounded-full shadow-sm" />
+            </button>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input
               label="Default Lead Days"
@@ -56,6 +84,19 @@ export const ReportMonitoringSettingsTab: React.FC<ReportMonitoringSettingsTabPr
                 setSettings((prev) => ({
                   ...prev,
                   defaultLeadDays: Math.max(0, Number(event.target.value) || 0),
+                }))
+              }
+            />
+            <Input
+              label="Overdue Reminder Days"
+              type="number"
+              min={0}
+              disabled={!settings.dailyReminderEnabled}
+              value={settings.overdueReminderDays}
+              onChange={(event) =>
+                setSettings((prev) => ({
+                  ...prev,
+                  overdueReminderDays: Math.max(0, Number(event.target.value) || 0),
                 }))
               }
             />
@@ -75,7 +116,7 @@ export const ReportMonitoringSettingsTab: React.FC<ReportMonitoringSettingsTabPr
           <div className="p-4 rounded-2xl bg-blue-50/70 dark:bg-blue-500/5 border border-blue-100 dark:border-blue-500/20 flex gap-3">
             <Clock size={18} className="text-blue-600 shrink-0 mt-0.5" />
             <p className="text-xs text-blue-700 dark:text-blue-300 leading-relaxed font-medium">
-              Individual projects and report schedules can override the default lead days. The backend command skips reminders already logged for the same report.
+              Automatic reminders run from the lead-day window through the overdue limit, stop once a submitted date is set, and send at most once per report per day. Individual projects and report schedules can override the lead days.
             </p>
           </div>
         </div>
@@ -83,7 +124,7 @@ export const ReportMonitoringSettingsTab: React.FC<ReportMonitoringSettingsTabPr
 
       <Card
         title="HTML Email Template"
-        description="Templates support {{projectName}}, {{reportTitle}}, {{period}}, {{deadline}}, {{daysRemaining}}, {{daysRemainingCount}}, {{focalPersonName}}, {{focalPersonEmail}}, and {{psaLogo}}"
+        description="Templates support {{deadlineHeadline}}, {{deadlineDescription}}, {{countdownSentence}}, {{projectName}}, {{reportTitle}}, {{period}}, {{deadline}}, {{daysRemaining}}, {{daysRemainingCount}}, {{focalPersonName}}, {{focalPersonEmail}}, and {{psaLogo}}"
       >
         <div className="space-y-4">
           <Input

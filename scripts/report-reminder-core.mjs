@@ -11,9 +11,11 @@ export const REPORT_REMINDER_KEYS = {
 
 export const DEFAULT_REPORT_REMINDER_SETTINGS = {
   enabled: true,
+  dailyReminderEnabled: true,
   defaultLeadDays: 5,
+  overdueReminderDays: 5,
   dailyCheckTime: '08:00',
-  subjectTemplate: 'Report reminder: {{reportTitle}} due {{daysRemaining}}',
+  subjectTemplate: 'Report reminder: {{reportTitle}} - {{deadlineHeadline}}',
   bodyTemplate:
     `<div style="margin:0;padding:0;background:#f4f6f8;font-family:Arial,Helvetica,sans-serif;color:#18181b;">
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;background:#f4f6f8;padding:24px 0;">
@@ -32,9 +34,9 @@ export const DEFAULT_REPORT_REMINDER_SETTINGS = {
         </td></tr>
         <tr><td style="padding:28px;">
           <div style="font-size:12px;font-weight:700;letter-spacing:0.08em;color:#2563eb;text-transform:uppercase;margin-bottom:8px;">Report Monitoring Reminder</div>
-          <h1 style="margin:0 0 16px 0;font-size:24px;line-height:1.3;color:#111827;">Report Submission Due: <span style="color:#dc2626;">{{daysRemaining}}</span></h1>
+          <h1 style="margin:0 0 16px 0;font-size:24px;line-height:1.3;color:#111827;"><span style="color:#dc2626;">{{deadlineHeadline}}</span></h1>
           <p style="margin:0 0 18px 0;font-size:15px;line-height:1.7;color:#3f3f46;">Hello <strong style="color:#111827;">{{focalPersonName}}</strong>,</p>
-          <p style="margin:0 0 22px 0;font-size:15px;line-height:1.7;color:#3f3f46;">This is an official reminder that the report below is approaching its submission deadline. Please ensure that it is completed, reviewed, and submitted on or before the due date.</p>
+          <p style="margin:0 0 22px 0;font-size:15px;line-height:1.7;color:#3f3f46;">{{deadlineDescription}}</p>
           <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin:0 0 24px 0;border:1px solid #e4e4e7;border-radius:10px;overflow:hidden;">
             <tr><td style="padding:14px 18px;background:#f8fafc;font-size:13px;color:#71717a;width:34%;border-bottom:1px solid #e4e4e7;">Project / Activity</td><td style="padding:14px 18px;background:#ffffff;font-size:14px;font-weight:700;color:#111827;border-bottom:1px solid #e4e4e7;">{{projectName}}</td></tr>
             <tr><td style="padding:14px 18px;background:#f8fafc;font-size:13px;color:#71717a;border-bottom:1px solid #e4e4e7;">Report</td><td style="padding:14px 18px;background:#ffffff;font-size:14px;font-weight:700;color:#111827;border-bottom:1px solid #e4e4e7;">{{reportTitle}}</td></tr>
@@ -43,7 +45,7 @@ export const DEFAULT_REPORT_REMINDER_SETTINGS = {
           </table>
           <div style="padding:16px 18px;margin:0 0 24px 0;background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;">
             <div style="font-size:14px;font-weight:700;color:#9a3412;margin-bottom:4px;">Submission Countdown</div>
-            <div style="font-size:14px;line-height:1.6;color:#7c2d12;">This report is due <strong>{{daysRemaining}}</strong>. Timely submission helps maintain accurate monitoring and compliance records.</div>
+            <div style="font-size:14px;line-height:1.6;color:#7c2d12;">{{countdownSentence}}</div>
           </div>
           <p style="margin:0 0 18px 0;font-size:15px;line-height:1.7;color:#3f3f46;">If the report has already been submitted, kindly disregard this reminder.</p>
           <p style="margin:0;font-size:15px;line-height:1.7;color:#3f3f46;">Thank you.</p>
@@ -53,6 +55,66 @@ export const DEFAULT_REPORT_REMINDER_SETTINGS = {
     </td></tr>
   </table>
 </div>`,
+};
+
+const OLD_DEADLINE_DESCRIPTION =
+  'This is an official reminder that the report below is approaching its submission deadline. Please ensure that it is completed, reviewed, and submitted on or before the due date.';
+
+const escapeRegExp = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const upgradeReportReminderTemplate = (template) =>
+  String(template || '')
+    .replace(
+      /Report Submission Due\s+in\s*(<span\b[^>]*>)?\s*\{\{daysRemaining\}\}\s+day\(s\)\s*(<\/span>)?/gi,
+      (_match, open = '', close = '') => `${open}{{deadlineHeadline}}${close}`,
+    )
+    .replace(
+      /This report is due\s+in\s*(<strong\b[^>]*>)?\s*\{\{daysRemaining\}\}\s+day\(s\)\s*(<\/strong>)?\.\s*Timely submission helps maintain accurate monitoring and compliance records\./gi,
+      '{{countdownSentence}}',
+    )
+    .replace(
+      /This report is due\s+in\s*(<strong\b[^>]*>)?\s*\{\{daysRemaining\}\}\s+day\(s\)\s*(<\/strong>)?\s*\./gi,
+      '{{countdownSentence}}',
+    )
+    .replace(new RegExp(escapeRegExp(OLD_DEADLINE_DESCRIPTION), 'gi'), '{{deadlineDescription}}')
+    .replace(/Report Submission Due\s+in\s+\{\{daysRemaining\}\}\s+day\(s\)/gi, '{{deadlineHeadline}}')
+    .replace(/in\s+\{\{daysRemaining\}\}\s+day\(s\)/gi, '{{daysRemaining}}')
+    .replace(/\{\{daysRemaining\}\}\s+day\(s\)/gi, '{{daysRemaining}}');
+
+const normalizeReminderNumber = (value, fallback) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(0, Math.round(parsed));
+};
+
+const normalizeReportReminderSettings = (value = {}) => {
+  const settings = value && typeof value === 'object' ? value : {};
+  return {
+    ...DEFAULT_REPORT_REMINDER_SETTINGS,
+    ...settings,
+    enabled:
+      typeof settings.enabled === 'boolean'
+        ? settings.enabled
+        : DEFAULT_REPORT_REMINDER_SETTINGS.enabled,
+    dailyReminderEnabled:
+      typeof settings.dailyReminderEnabled === 'boolean'
+        ? settings.dailyReminderEnabled
+        : DEFAULT_REPORT_REMINDER_SETTINGS.dailyReminderEnabled,
+    defaultLeadDays: normalizeReminderNumber(
+      settings.defaultLeadDays,
+      DEFAULT_REPORT_REMINDER_SETTINGS.defaultLeadDays,
+    ),
+    overdueReminderDays: normalizeReminderNumber(
+      settings.overdueReminderDays,
+      DEFAULT_REPORT_REMINDER_SETTINGS.overdueReminderDays,
+    ),
+    subjectTemplate: upgradeReportReminderTemplate(
+      settings.subjectTemplate || DEFAULT_REPORT_REMINDER_SETTINGS.subjectTemplate,
+    ),
+    bodyTemplate: upgradeReportReminderTemplate(
+      settings.bodyTemplate || DEFAULT_REPORT_REMINDER_SETTINGS.bodyTemplate,
+    ),
+  };
 };
 
 export const getPocketBaseUrl = () =>
@@ -92,6 +154,15 @@ const normalizeDate = (value) => {
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
+const toLocalDateKey = (date) => {
+  const value = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(value.getTime())) return '';
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, '0');
+  const day = String(value.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 const getLeadDays = (report, project, settings) => {
   const raw = report.reminderLeadDays ?? project?.reminderLeadDays ?? settings.defaultLeadDays ?? 5;
   const parsed = Number(raw);
@@ -111,8 +182,72 @@ const formatDaysRemaining = (days) => {
   return `Overdue by ${overdueDays} ${overdueDays === 1 ? 'day' : 'days'}`;
 };
 
+const formatDeadlineCopy = (days) => {
+  if (days === 0) {
+    return {
+      deadlineHeadline: 'Report Submission Due Today',
+      deadlineDescription:
+        'This is an official reminder that the report below is due today. Please ensure that it is completed, reviewed, and submitted before the end of the day.',
+      countdownSentence:
+        'This report is due today. Timely submission helps maintain accurate monitoring and compliance records.',
+    };
+  }
+
+  if (days > 0) {
+    const remaining = days === 1 ? 'in 1 day' : `in ${days} days`;
+    return {
+      deadlineHeadline: `Report Submission Due ${remaining}`,
+      deadlineDescription:
+        'This is an official reminder that the report below is approaching its submission deadline. Please ensure that it is completed, reviewed, and submitted on or before the due date.',
+      countdownSentence:
+        `This report is due ${remaining}. Timely submission helps maintain accurate monitoring and compliance records.`,
+    };
+  }
+
+  const overdueDays = Math.abs(days);
+  const overdueLabel = `${overdueDays} ${overdueDays === 1 ? 'day' : 'days'}`;
+  return {
+    deadlineHeadline: `Report Submission Overdue by ${overdueLabel}`,
+    deadlineDescription:
+      'This is an official reminder that the report below is past its submission deadline. Please prioritize completion, review, and submission as soon as possible.',
+    countdownSentence:
+      `This report is overdue by ${overdueLabel}. Prompt submission helps maintain accurate monitoring and compliance records.`,
+  };
+};
+
 const fillTemplate = (template, values) =>
   String(template || '').replace(/\{\{(\w+)\}\}/g, (_match, key) => String(values[key] ?? ''));
+
+const applyDeadlineCopyFallbacks = (content, values) => {
+  let output = String(content || '');
+  const headlinePattern = /Report Submission Due\s+in\s*(<span\b[^>]*>)?\s*(?:in\s+)?(?:Today|\d+\s+days?|1\s+day|Overdue by \d+\s+days?|Overdue by 1\s+day)\s+day\(s\)\s*(<\/span>)?/gi;
+  const countdownPattern = /This report is due\s+in\s*(<strong\b[^>]*>)?\s*(?:in\s+)?(?:Today|\d+\s+days?|1\s+day|Overdue by \d+\s+days?|Overdue by 1\s+day)\s+day\(s\)\s*(<\/strong>)?\s*\.\s*(?:Timely submission helps maintain accurate monitoring and compliance records\.)?/gi;
+
+  output = output
+    .replace(headlinePattern, (_match, open = '', close = '') =>
+      `${open}${values.deadlineHeadline}${close}`,
+    )
+    .replace(countdownPattern, values.countdownSentence)
+    .replace(/Report Submission Due\s+in\s*(<span\b[^>]*>)?\s*Today\s+day\(s\)\s*(<\/span>)?/gi, (_match, open = '', close = '') =>
+      `${open}${values.deadlineHeadline}${close}`,
+    )
+    .replace(/due\s+in\s+in\s+(\d+\s+days?)\s+day\(s\)/gi, 'due in $1')
+    .replace(/in\s+in\s+(\d+\s+days?)\s+day\(s\)/gi, 'in $1')
+    .replace(/This report is due\s+in\s*(<strong\b[^>]*>)?\s*Today\s+day\(s\)\s*(<\/strong>)?\s*\./gi, values.countdownSentence)
+    .replace(/due\s+in\s*Today\s+day\(s\)/gi, 'due today')
+    .replace(/in\s+Today\s+day\(s\)/gi, 'today')
+    .replace(/(\d+\s+days?)\s+day\(s\)/gi, '$1')
+    .replace(/Today\s+day\(s\)/gi, 'today');
+
+  if (values.daysRemainingCount === '0') {
+    output = output.replace(
+      /This is an official reminder that the report below is approaching its submission deadline\.\s*Please ensure that it is completed, reviewed, and submitted on or before the due date\./gi,
+      values.deadlineDescription,
+    );
+  }
+
+  return output;
+};
 
 const escapeHtml = (value) =>
   String(value ?? '')
@@ -297,7 +432,11 @@ export const runReportReminders = async ({
     findAppState(pb, REPORT_REMINDER_KEYS.log, []),
   ]);
 
-  const settings = { ...DEFAULT_REPORT_REMINDER_SETTINGS, ...(rawSettings && typeof rawSettings === 'object' ? rawSettings : {}) };
+  const rawSettingsObject = rawSettings && typeof rawSettings === 'object' ? rawSettings : {};
+  const settings = normalizeReportReminderSettings(rawSettingsObject);
+  if (!dryRun && JSON.stringify(settings) !== JSON.stringify({ ...DEFAULT_REPORT_REMINDER_SETTINGS, ...rawSettingsObject })) {
+    await upsertAppState(pb, REPORT_REMINDER_KEYS.settings, settings);
+  }
   const reminderLog = Array.isArray(rawLog) ? rawLog : [];
   const projectList = Array.isArray(projects) ? projects : [];
   const reportList = Array.isArray(submissions) ? submissions : [];
@@ -306,17 +445,22 @@ export const runReportReminders = async ({
     return { sent: 0, failed: 0, skipped: 0, disabled: true };
   }
 
+  if (!settings.dailyReminderEnabled && !testMode) {
+    return { sent: 0, failed: 0, skipped: 0, disabled: false };
+  }
+
   const userRecords = await pb.collection('users').getFullList({ sort: 'name' });
   const usersById = new Map(userRecords.map((user) => [String(user.id), user]));
   const projectsById = new Map(projectList.map((project) => [String(project.id), project]));
-  const sentReportIds = new Set(
-    reminderLog
-      .filter((entry) => entry.status === 'sent')
-      .map((entry) => String(entry.reportId)),
-  );
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+  const todayKey = toLocalDateKey(today);
+  const sentTodayReportIds = new Set(
+    reminderLog
+      .filter((entry) => entry.status === 'sent' && toLocalDateKey(entry.sentAt) === todayKey)
+      .map((entry) => String(entry.reportId)),
+  );
   const nextLog = [...reminderLog];
   let sent = 0;
   let failed = 0;
@@ -333,7 +477,7 @@ export const runReportReminders = async ({
       continue;
     }
 
-    if (!testMode && (report.submittedDate || report.archived || sentReportIds.has(String(report.id)))) {
+    if (!testMode && (report.submittedDate || report.archived || sentTodayReportIds.has(String(report.id)))) {
       skipped += 1;
       continue;
     }
@@ -353,7 +497,9 @@ export const runReportReminders = async ({
     const leadDays = getLeadDays(report, project, settings);
     const reminderStart = new Date(deadline);
     reminderStart.setDate(deadline.getDate() - leadDays);
-    if (!testMode && (today < reminderStart || today > deadline)) {
+    const reminderEnd = new Date(deadline);
+    reminderEnd.setDate(deadline.getDate() + settings.overdueReminderDays);
+    if (!testMode && (today < reminderStart || today > reminderEnd)) {
       skipped += 1;
       continue;
     }
@@ -376,6 +522,7 @@ export const runReportReminders = async ({
       continue;
     }
 
+    const deadlineCopy = formatDeadlineCopy(daysUntilDeadline);
     const values = {
       projectName: project.name || 'Unnamed project',
       reportTitle: report.title || 'Untitled report',
@@ -385,11 +532,12 @@ export const runReportReminders = async ({
       focalPersonEmail: focalEmail,
       daysRemaining: formatDaysRemaining(daysUntilDeadline),
       daysRemainingCount: String(daysUntilDeadline),
+      ...deadlineCopy,
       psaLogo: buildPsaLogoHtml(),
     };
 
-    const subject = fillTemplate(settings.subjectTemplate, values);
-    const htmlBody = fillTemplate(settings.bodyTemplate, values);
+    const subject = applyDeadlineCopyFallbacks(fillTemplate(settings.subjectTemplate, values), values);
+    const htmlBody = applyDeadlineCopyFallbacks(fillTemplate(settings.bodyTemplate, values), values);
     const textBody = stripHtmlToText(htmlBody) || [
       'PHILIPPINE STATISTICS AUTHORITY',
       'Aurora Provincial Statistical Office',
@@ -411,6 +559,9 @@ export const runReportReminders = async ({
       sent += 1;
       if (!dryRun) {
         nextLog.push({ ...logBase, status: testMode ? 'manual-test' : 'sent' });
+        if (!testMode) {
+          sentTodayReportIds.add(String(report.id));
+        }
       }
     } catch (error) {
       failed += 1;
