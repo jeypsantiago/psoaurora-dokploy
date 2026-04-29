@@ -5,7 +5,6 @@ import {
   Bell,
   CalendarClock,
   ChevronDown,
-  ChevronRight,
   CheckCircle2,
   ClipboardCheck,
   Download,
@@ -51,6 +50,7 @@ import { useUsers, type User } from "../UserContext";
 
 type ViewTab = "projects" | "all" | "due-soon";
 type RecordScope = "current" | "history" | "all";
+type ProjectReportView = "active" | "history";
 
 interface ReportRow {
   report: ReportSubmission;
@@ -150,11 +150,11 @@ export const ReportMonitoringPage: React.FC = () => {
   );
 
   const [activeTab, setActiveTab] = useState<ViewTab>("projects");
-  const [query, setQuery] = useState("");
-  const [projectFilter, setProjectFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState<"all" | ReportStatus>("all");
   const [recordScope, setRecordScope] = useState<RecordScope>("current");
-  const [expandedProjectId, setExpandedProjectId] = useState<string | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [projectReportView, setProjectReportView] = useState<ProjectReportView>("active");
+  const [projectReportQuery, setProjectReportQuery] = useState("");
+  const [projectSearchQuery, setProjectSearchQuery] = useState("");
   const [manualSendingReportId, setManualSendingReportId] = useState<string | null>(null);
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
@@ -227,7 +227,6 @@ export const ReportMonitoringPage: React.FC = () => {
   [projectsById, reminderLog, reports, settings, usersById]);
 
   const reportRows = useMemo(() => {
-    const search = query.trim().toLowerCase();
     return allReportRows
       .filter((row) => {
         if (activeTab === "due-soon" && row.status !== "due-soon" && row.status !== "overdue") {
@@ -238,21 +237,7 @@ export const ReportMonitoringPage: React.FC = () => {
           if (recordScope === "current" && row.isHistory) return false;
           if (recordScope === "history" && !row.isHistory) return false;
         }
-        if (projectFilter !== "all" && row.report.projectId !== projectFilter) return false;
-        if (statusFilter !== "all" && row.status !== statusFilter) return false;
-        if (!search) return true;
-        return [
-          row.report.title,
-          row.report.period,
-          row.project?.name,
-          row.focal?.name,
-          row.focal?.email,
-          row.report.remarks,
-        ]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase()
-          .includes(search);
+        return true;
       })
       .sort((a, b) => {
         const dateDiff =
@@ -260,39 +245,21 @@ export const ReportMonitoringPage: React.FC = () => {
           (Date.parse(`${b.report.deadline}T00:00:00`) || 0);
         return activeTab === "due-soon" ? dateDiff : byUpdatedDesc(a.report, b.report);
       });
-  }, [activeTab, allReportRows, projectFilter, query, recordScope, statusFilter]);
+  }, [activeTab, allReportRows, recordScope]);
 
   const projectGroups = useMemo(() => {
-    const search = query.trim().toLowerCase();
     const rowsByProject = new Map<string, ReportRow[]>();
     for (const row of allReportRows) {
       if (activeTab === "due-soon" && row.status !== "due-soon" && row.status !== "overdue") {
         continue;
       }
       if (activeTab === "due-soon" && row.isHistory) continue;
-      if (projectFilter !== "all" && row.report.projectId !== projectFilter) continue;
-      if (statusFilter !== "all" && row.status !== statusFilter) continue;
-      if (search) {
-        const rowText = [
-          row.report.title,
-          row.report.period,
-          row.project?.name,
-          row.focal?.name,
-          row.focal?.email,
-          row.report.remarks,
-        ]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase();
-        if (!rowText.includes(search)) continue;
-      }
       const nextRows = rowsByProject.get(row.report.projectId) || [];
       nextRows.push(row);
       rowsByProject.set(row.report.projectId, nextRows);
     }
 
     return projects
-      .filter((project) => projectFilter === "all" || project.id === projectFilter)
       .map((project) => {
         const focal = usersById.get(project.focalUserId);
         const rows = [...(rowsByProject.get(project.id) || [])].sort((a, b) => {
@@ -301,13 +268,7 @@ export const ReportMonitoringPage: React.FC = () => {
             (Date.parse(`${b.report.deadline}T00:00:00`) || 0);
           return dateDiff || a.report.title.localeCompare(b.report.title);
         });
-        const projectText = [project.name, focal?.name, focal?.email, project.notes]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase();
-        const searchMatchesProject = !search || projectText.includes(search);
-        if (!searchMatchesProject && rows.length === 0) return null;
-        if ((activeTab === "due-soon" || statusFilter !== "all") && rows.length === 0) {
+        if (activeTab === "due-soon" && rows.length === 0) {
           return null;
         }
         const currentRows = rows.filter((row) => !row.isHistory);
@@ -358,7 +319,98 @@ export const ReportMonitoringPage: React.FC = () => {
         const bDate = Date.parse(`${b.nextDeadline || "9999-12-31"}T00:00:00`) || Number.MAX_SAFE_INTEGER;
         return aDate - bDate || a.project.name.localeCompare(b.project.name);
       });
-  }, [activeTab, allReportRows, projectFilter, projects, query, statusFilter, usersById]);
+  }, [activeTab, allReportRows, projects, usersById]);
+
+  const filteredProjectGroups = useMemo(() => {
+    const search = projectSearchQuery.trim().toLowerCase();
+    if (!search) return projectGroups;
+    return projectGroups.filter((group) => {
+      if (!group) return false;
+      return [
+        group.project.name,
+        group.focal?.name,
+        group.focal?.email,
+        group.project.notes,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(search);
+    });
+  }, [projectGroups, projectSearchQuery]);
+
+  const selectedProjectGroup = useMemo(
+    () =>
+      filteredProjectGroups.find((group) => group?.project.id === selectedProjectId) ||
+      filteredProjectGroups[0] ||
+      null,
+    [filteredProjectGroups, selectedProjectId],
+  );
+
+  useEffect(() => {
+    if (filteredProjectGroups.length === 0) {
+      if (selectedProjectId) setSelectedProjectId(null);
+      return;
+    }
+
+    const nextProjectId = selectedProjectGroup?.project.id || null;
+    if (nextProjectId && selectedProjectId !== nextProjectId) {
+      setSelectedProjectId(nextProjectId);
+    }
+  }, [filteredProjectGroups, selectedProjectGroup, selectedProjectId]);
+
+  useEffect(() => {
+    setProjectReportQuery("");
+  }, [selectedProjectId]);
+
+  useEffect(() => {
+    if (activeTab === "due-soon" && projectReportView === "history") {
+      setProjectReportView("active");
+    }
+  }, [activeTab, projectReportView]);
+
+  const selectedCurrentRows = useMemo(() => {
+    const search = projectReportQuery.trim().toLowerCase();
+    const rows = selectedProjectGroup?.currentRows || [];
+    if (!search) return rows;
+    return rows.filter((row) =>
+      [
+        row.report.title,
+        row.report.period,
+        row.report.remarks,
+        row.focal?.name,
+        row.focal?.email,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(search),
+    );
+  }, [projectReportQuery, selectedProjectGroup]);
+
+  const selectedHistoryRows = useMemo(() => {
+    const search = projectReportQuery.trim().toLowerCase();
+    const rows = selectedProjectGroup?.historyRows || [];
+    if (!search) return rows;
+    return rows.filter((row) =>
+      [
+        row.report.title,
+        row.report.period,
+        row.report.remarks,
+        row.focal?.name,
+        row.focal?.email,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(search),
+    );
+  }, [projectReportQuery, selectedProjectGroup]);
+
+  const visibleProjectRows =
+    activeTab !== "due-soon" && projectReportView === "history"
+      ? selectedHistoryRows
+      : selectedCurrentRows;
 
   const stats = useMemo(() => {
     const currentReports = reports.filter((report) => !isReportHistoryRecord(report));
@@ -415,7 +467,7 @@ export const ReportMonitoringPage: React.FC = () => {
       projectId: project.id,
       frequency: project.defaultFrequency,
     });
-    setExpandedProjectId(project.id);
+    setSelectedProjectId(project.id);
     setIsReportModalOpen(true);
   };
 
@@ -712,6 +764,137 @@ export const ReportMonitoringPage: React.FC = () => {
       </span>
     );
 
+  const renderReportActions = (row: ReportRow) => (
+    <div className="flex justify-end gap-1">
+      {isSuperAdmin && (
+        <button
+          onClick={() => sendManualTestReminder(row)}
+          disabled={manualSendingReportId === row.report.id}
+          className="p-2 rounded-lg text-zinc-400 hover:text-blue-600 hover:bg-zinc-50 disabled:opacity-50 dark:hover:bg-zinc-900"
+          title="Send test reminder"
+        >
+          {manualSendingReportId === row.report.id ? (
+            <MailCheck size={15} />
+          ) : (
+            <Send size={15} />
+          )}
+        </button>
+      )}
+      {can("reports.edit") && row.isHistory && !row.hasCurrentNext && (
+        <button
+          onClick={() => generateNextReport(row.report)}
+          className="p-2 rounded-lg text-zinc-400 hover:text-emerald-600 hover:bg-zinc-50 dark:hover:bg-zinc-900"
+          title="Generate next period"
+        >
+          <FilePlus2 size={15} />
+        </button>
+      )}
+      {can("reports.edit") && (
+        <button
+          onClick={() => openEditReport(row.report)}
+          className="p-2 rounded-lg text-zinc-400 hover:text-blue-600 hover:bg-zinc-50 dark:hover:bg-zinc-900"
+          title="Edit report"
+        >
+          <Edit3 size={15} />
+        </button>
+      )}
+      {can("reports.delete") && (
+        <button
+          onClick={() => deleteReport(row.report)}
+          className="p-2 rounded-lg text-zinc-400 hover:text-red-500 hover:bg-zinc-50 dark:hover:bg-zinc-900"
+          title="Delete report"
+        >
+          <Trash2 size={15} />
+        </button>
+      )}
+    </div>
+  );
+
+  const renderReportCards = (rows: ReportRow[]) => (
+    <div className="space-y-3">
+      {rows.map((row) => (
+        <article
+          key={row.report.id}
+          className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950"
+        >
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h4 className="text-sm font-black leading-tight text-zinc-900 dark:text-white">
+                  {row.report.title}
+                </h4>
+                <Badge variant={statusBadge[row.status]}>{statusLabel[row.status]}</Badge>
+                <Badge variant="info">{formatReportFrequency(row.report.frequency)}</Badge>
+                {row.isHistory && <Badge variant="default">History</Badge>}
+                {row.report.generatedFromReportId && !row.isHistory && (
+                  <Badge variant="success">Next generated</Badge>
+                )}
+              </div>
+              <p className="mt-1 text-xs font-semibold text-zinc-600 dark:text-zinc-300">
+                {row.report.period || "No period"}
+              </p>
+              {row.report.remarks && (
+                <p className="mt-2 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
+                  {row.report.remarks}
+                </p>
+              )}
+            </div>
+            {renderReportActions(row)}
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 dark:border-zinc-800 dark:bg-zinc-900/50">
+              <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
+                Deadline
+              </p>
+              <p className="mt-1 text-sm font-black text-zinc-900 dark:text-white">
+                {formatReportDate(row.report.deadline)}
+              </p>
+            </div>
+            <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 dark:border-zinc-800 dark:bg-zinc-900/50">
+              <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
+                Submitted
+              </p>
+              <div className="mt-1">{renderSubmittedCell(row.report)}</div>
+            </div>
+            <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 dark:border-zinc-800 dark:bg-zinc-900/50">
+              <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
+                Reminder
+              </p>
+              <p className="mt-1 text-sm font-black text-zinc-900 dark:text-white">
+                {row.leadDays} days before
+              </p>
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                {row.lastReminder
+                  ? `${row.lastReminder.status}: ${formatReportDate(row.lastReminder.sentAt.slice(0, 10))}`
+                  : "Not sent"}
+              </p>
+            </div>
+            <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 dark:border-zinc-800 dark:bg-zinc-900/50">
+              <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
+                Focal Person
+              </p>
+              <p className="mt-1 truncate text-sm font-black text-zinc-900 dark:text-white">
+                {row.focal?.name || "Needs attention"}
+              </p>
+              <p className="truncate text-[11px] text-zinc-500 dark:text-zinc-400">
+                {row.focal?.email || "No email available"}
+              </p>
+            </div>
+          </div>
+        </article>
+      ))}
+      {rows.length === 0 && (
+        <div className="rounded-2xl border border-dashed border-zinc-300 p-8 text-center dark:border-zinc-700">
+          <MailWarning size={30} className="mx-auto mb-3 text-zinc-400" />
+          <p className="text-sm font-bold text-zinc-900 dark:text-white">
+            No reports match this project view.
+          </p>
+          <p className="mt-1 text-xs text-zinc-500">Add a report schedule or adjust filters.</p>
+        </div>
+      )}
+    </div>
+  );
+
   const renderReportRows = (rows: ReportRow[], options: { showProject: boolean }) => (
     <div className="overflow-x-auto -mx-5 sm:mx-0">
       <table className="w-full min-w-[1080px] text-left">
@@ -797,47 +980,7 @@ export const ReportMonitoringPage: React.FC = () => {
               </td>
               <td className="py-4 px-5 sm:px-0">
                 <div className="flex justify-end gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                  {isSuperAdmin && (
-                    <button
-                      onClick={() => sendManualTestReminder(row)}
-                      disabled={manualSendingReportId === row.report.id}
-                      className="p-2 rounded-lg text-zinc-400 hover:text-blue-600 hover:bg-zinc-50 disabled:opacity-50 dark:hover:bg-zinc-900"
-                      title="Send test reminder"
-                    >
-                      {manualSendingReportId === row.report.id ? (
-                        <MailCheck size={15} />
-                      ) : (
-                        <Send size={15} />
-                      )}
-                    </button>
-                  )}
-                  {can("reports.edit") && row.isHistory && !row.hasCurrentNext && (
-                    <button
-                      onClick={() => generateNextReport(row.report)}
-                      className="p-2 rounded-lg text-zinc-400 hover:text-emerald-600 hover:bg-zinc-50 dark:hover:bg-zinc-900"
-                      title="Generate next period"
-                    >
-                      <FilePlus2 size={15} />
-                    </button>
-                  )}
-                  {can("reports.edit") && (
-                    <button
-                      onClick={() => openEditReport(row.report)}
-                      className="p-2 rounded-lg text-zinc-400 hover:text-blue-600 hover:bg-zinc-50 dark:hover:bg-zinc-900"
-                      title="Edit report"
-                    >
-                      <Edit3 size={15} />
-                    </button>
-                  )}
-                  {can("reports.delete") && (
-                    <button
-                      onClick={() => deleteReport(row.report)}
-                      className="p-2 rounded-lg text-zinc-400 hover:text-red-500 hover:bg-zinc-50 dark:hover:bg-zinc-900"
-                      title="Delete report"
-                    >
-                      <Trash2 size={15} />
-                    </button>
-                  )}
+                  {renderReportActions(row)}
                 </div>
               </td>
             </tr>
@@ -876,34 +1019,29 @@ export const ReportMonitoringPage: React.FC = () => {
               <Download size={14} className="mr-2" /> Export
             </Button>
           )}
-          {can("reports.edit") && (
-            <Button variant="blue" onClick={openNewReport} disabled={projects.length === 0}>
-              <FilePlus2 size={14} className="mr-2" /> New Report
-            </Button>
-          )}
         </div>
       </div>
 
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-2">
         {[
           { label: "Projects", value: stats.totalProjects, hint: `${stats.activeProjects} active`, icon: FolderKanban },
           { label: "Due Soon", value: stats.dueSoon, hint: `${settings.defaultLeadDays}-day default reminder`, icon: CalendarClock },
           { label: "Overdue", value: stats.overdue, hint: "Past deadline", icon: AlertTriangle },
           { label: "Submitted", value: stats.submittedThisMonth, hint: "This month", icon: CheckCircle2 },
         ].map((card) => (
-          <div key={card.label} className="p-4 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200/90 dark:border-zinc-800 shadow-sm">
-            <div className="flex items-start justify-between gap-3">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+          <div key={card.label} className="rounded-xl border border-zinc-200/90 bg-white p-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
                 {card.label}
               </p>
-              <div className="h-8 w-8 rounded-xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-500">
-                <card.icon size={16} />
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-100 text-zinc-500 dark:bg-zinc-800">
+                <card.icon size={14} />
               </div>
             </div>
-            <p className="mt-3 text-2xl font-extrabold text-zinc-900 dark:text-white">
+            <p className="mt-2 text-xl font-extrabold text-zinc-900 dark:text-white">
               {card.value.toLocaleString()}
             </p>
-            <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400 truncate">{card.hint}</p>
+            <p className="mt-0.5 truncate text-[10px] text-zinc-500 dark:text-zinc-400">{card.hint}</p>
           </div>
         ))}
       </div>
@@ -943,42 +1081,13 @@ export const ReportMonitoringPage: React.FC = () => {
               ))}
             </div>
           )}
-          <div className="relative">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search reports..."
-              className="w-full sm:w-64 pl-9 pr-3 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-sm outline-none focus:ring-2 focus:ring-blue-500/20"
-            />
-          </div>
-          <select
-            value={projectFilter}
-            onChange={(event) => setProjectFilter(event.target.value)}
-            className="px-3 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-sm outline-none"
-          >
-            <option value="all">All Projects</option>
-            {projects.map((project) => (
-              <option key={project.id} value={project.id}>{project.name}</option>
-            ))}
-          </select>
-          <select
-            value={statusFilter}
-            onChange={(event) => setStatusFilter(event.target.value as "all" | ReportStatus)}
-            className="px-3 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-sm outline-none"
-          >
-            <option value="all">All Status</option>
-            {Object.entries(statusLabel).map(([value, label]) => (
-              <option key={value} value={value}>{label}</option>
-            ))}
-          </select>
         </div>
       </div>
 
-      {activeTab === "projects" || activeTab === "due-soon" ? (
+      {activeTab === "projects" ? (
         <Card
-          title={activeTab === "due-soon" ? "Due Soon by Project" : "Project Board"}
-          description="Open a project tile to manage its reports without losing focal person, deadline, and reminder context"
+          title="Project Board"
+          description="Select a project or activity to review report deadlines, due dates, submissions, and reminder readiness instantly"
           action={can("reports.edit") && <Button variant="blue" onClick={openNewProject}><Plus size={14} className="mr-2" /> New Activity/Project</Button>}
         >
           {projectGroups.length === 0 ? (
@@ -988,147 +1097,324 @@ export const ReportMonitoringPage: React.FC = () => {
               <p className="text-xs text-zinc-500 mt-1">Adjust filters or create a project and report schedule.</p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {projectGroups.map((group) => {
-                if (!group) return null;
-                const { project, focal, counts } = group;
-                const expanded = expandedProjectId === project.id;
-                const health =
-                  !project.active ? "gray" : counts.overdue > 0 ? "red" : counts.dueSoon > 0 ? "amber" : "green";
-                const healthClasses: Record<string, string> = {
-                  green: "bg-emerald-500",
-                  amber: "bg-amber-500",
-                  red: "bg-red-500",
-                  gray: "bg-zinc-400",
-                };
-                return (
-                  <div key={project.id} className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/80 dark:bg-zinc-950/40 overflow-hidden">
+            <div className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
+              <div className="space-y-3">
+                <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-950/60">
+                  <div className="relative">
+                    <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+                    <input
+                      list="report-project-search-list"
+                      value={projectSearchQuery}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        setProjectSearchQuery(value);
+                        const match = projectGroups.find(
+                          (group) =>
+                            group?.project.name.toLowerCase() === value.trim().toLowerCase(),
+                        );
+                        if (match) {
+                          setSelectedProjectId(match.project.id);
+                        }
+                      }}
+                      placeholder="Search activities or projects..."
+                      className="w-full rounded-xl border border-zinc-200 bg-white py-2.5 pl-9 pr-9 text-sm outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-500/20 dark:border-zinc-800 dark:bg-zinc-950 dark:focus:border-blue-500/40"
+                    />
+                    <ChevronDown
+                      size={16}
+                      className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-zinc-700 dark:text-zinc-300"
+                    />
+                    <datalist id="report-project-search-list">
+                      {projectGroups.map((group) =>
+                        group ? <option key={group.project.id} value={group.project.name} /> : null,
+                      )}
+                    </datalist>
+                  </div>
+                  <p className="mt-2 text-[10px] font-semibold uppercase tracking-widest text-zinc-400">
+                    {filteredProjectGroups.length.toLocaleString()} of {projectGroups.length.toLocaleString()} shown
+                  </p>
+                </div>
+
+                <div className="space-y-3 xl:max-h-[calc(100vh-430px)] xl:overflow-y-auto xl:pr-1">
+                {filteredProjectGroups.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-zinc-300 p-6 text-center dark:border-zinc-700">
+                    <FolderKanban size={26} className="mx-auto mb-3 text-zinc-400" />
+                    <p className="text-sm font-bold text-zinc-900 dark:text-white">
+                      No activity or project found.
+                    </p>
+                    <p className="mt-1 text-xs text-zinc-500">
+                      Try a project name, focal name, or focal email.
+                    </p>
+                  </div>
+                ) : filteredProjectGroups.map((group) => {
+                  if (!group) return null;
+                  const { project, focal, counts } = group;
+                  const selected = selectedProjectGroup?.project.id === project.id;
+                  const health =
+                    !project.active ? "gray" : counts.overdue > 0 ? "red" : counts.dueSoon > 0 ? "amber" : "green";
+                  const healthClasses: Record<string, string> = {
+                    green: "bg-emerald-500",
+                    amber: "bg-amber-500",
+                    red: "bg-red-500",
+                    gray: "bg-zinc-400",
+                  };
+                  const counterPills = [
+                    {
+                      label: "Reports",
+                      value: counts.total,
+                      className:
+                        "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300",
+                    },
+                    {
+                      label: "Due Soon",
+                      value: counts.dueSoon,
+                      className:
+                        "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300",
+                    },
+                    {
+                      label: "Overdue",
+                      value: counts.overdue,
+                      className:
+                        "border-red-200 bg-red-50 text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300",
+                    },
+                    {
+                      label: "Submitted",
+                      value: counts.submitted,
+                      className:
+                        "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300",
+                    },
+                  ];
+
+                  return (
                     <button
+                      key={project.id}
                       type="button"
-                      onClick={() => setExpandedProjectId(expanded ? null : project.id)}
-                      className="w-full p-4 text-left hover:bg-white/70 dark:hover:bg-zinc-900/50 transition-colors"
+                      onClick={() => setSelectedProjectId(project.id)}
+                      className={`w-full rounded-2xl border p-3 text-left transition-all ${
+                        selected
+                          ? "border-blue-300 bg-blue-50/70 shadow-sm ring-2 ring-blue-500/10 dark:border-blue-500/40 dark:bg-blue-500/10"
+                          : "border-zinc-200 bg-white hover:border-blue-200 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-blue-500/30 dark:hover:bg-zinc-900/60"
+                      }`}
                     >
-                      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-                        <div className="flex items-start gap-3 min-w-0">
-                          <div className="mt-1 flex items-center gap-2">
-                            {expanded ? <ChevronDown size={17} /> : <ChevronRight size={17} />}
-                            <span className={`h-3 w-3 rounded-full ${healthClasses[health]}`} />
+                      <div className="mb-2 flex flex-wrap gap-1">
+                        {counterPills.map((counter) => (
+                          <span
+                            key={counter.label}
+                            className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide ${counter.className}`}
+                          >
+                            <span>{counter.label}</span>
+                            <span>{counter.value.toLocaleString()}</span>
+                          </span>
+                        ))}
+                      </div>
+                      <div className="flex items-start gap-3">
+                        <span className={`mt-1 h-3 w-3 shrink-0 rounded-full ${healthClasses[health]}`} />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="min-w-0 text-sm font-black leading-snug text-zinc-900 dark:text-white">
+                              {project.name}
+                            </h3>
+                            <Badge variant={project.active ? "success" : "default"}>
+                              {project.active ? "Active" : "Inactive"}
+                            </Badge>
+                            <Badge variant="info">{formatReportFrequency(project.defaultFrequency)}</Badge>
+                            {group.hasAttention && <Badge variant="warning">Attention Required</Badge>}
                           </div>
-                          <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <h3 className="text-sm font-black text-zinc-900 dark:text-white truncate">{project.name}</h3>
-                              <Badge variant={project.active ? "success" : "default"}>{project.active ? "Active" : "Inactive"}</Badge>
-                              <Badge variant="info">{formatReportFrequency(project.defaultFrequency)}</Badge>
-                              {group.hasAttention && <Badge variant="warning">Attention Required</Badge>}
+                          <div className="mt-3 grid gap-2 text-xs">
+                            <div>
+                              <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
+                                Focal Name
+                              </p>
+                              <p className="truncate font-bold text-zinc-800 dark:text-zinc-100">
+                                {focal?.name || "Focal user missing"}
+                              </p>
                             </div>
-                            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                              {focal ? `${focal.name} - ${focal.email || "No email available"}` : "Focal user missing"}
-                            </p>
-                            <p className="mt-1 text-[11px] text-zinc-500">
-                              Next deadline: {formatReportDate(group.nextDeadline)} - Reminder: {project.reminderLeadDays ?? settings.defaultLeadDays} days
-                            </p>
+                            <div>
+                              <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
+                                Email
+                              </p>
+                              <p className="truncate font-medium text-zinc-500 dark:text-zinc-400">
+                                {focal?.email || "No email available"}
+                              </p>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
+                                  Next Deadline
+                                </p>
+                                <p className="font-bold text-zinc-800 dark:text-zinc-100">
+                                  {formatReportDate(group.nextDeadline)}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
+                                  Lead Days
+                                </p>
+                                <p className="font-bold text-zinc-800 dark:text-zinc-100">
+                                  {project.reminderLeadDays ?? settings.defaultLeadDays} days
+                                </p>
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 xl:w-[420px]">
-                          {[
-                            {
-                              label: "Reports",
-                              value: counts.total,
-                              className:
-                                "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300",
-                            },
-                            {
-                              label: "Due Soon",
-                              value: counts.dueSoon,
-                              className:
-                                "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300",
-                            },
-                            {
-                              label: "Overdue",
-                              value: counts.overdue,
-                              className:
-                                "border-red-200 bg-red-50 text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300",
-                            },
-                            {
-                              label: "Submitted",
-                              value: counts.submitted,
-                              className:
-                                "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300",
-                            },
-                          ].map((counter) => (
-                            <div
-                              key={counter.label}
-                              className={`rounded-xl border px-3 py-2 ${counter.className}`}
-                            >
-                              <p className="text-[10px] font-black uppercase tracking-widest opacity-90">{counter.label}</p>
-                              <p className="text-lg font-black">{counter.value.toLocaleString()}</p>
-                            </div>
-                          ))}
                         </div>
                       </div>
                     </button>
-                    {expanded && (
-                      <div className="border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-4 space-y-4">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="flex flex-wrap gap-2">
-                            {can("reports.edit") && (
-                              <>
-                                <Button variant="blue" onClick={() => openNewReportForProject(project)}>
-                                  <Plus size={14} className="mr-2" /> Add Report to Project
-                                </Button>
-                                <Button variant="outline" onClick={() => openEditProject(project)}>
-                                  <Edit3 size={14} className="mr-2" /> Edit Project
-                                </Button>
-                              </>
-                            )}
-                            {can("reports.delete") && (
-                              <Button variant="outline" onClick={() => deleteProject(project)}>
-                                <Trash2 size={14} className="mr-2" /> Delete Project
-                              </Button>
-                            )}
-                          </div>
-                          <Button variant="ghost" onClick={() => setExpandedProjectId(null)}>Collapse</Button>
-                        </div>
-                        {project.notes && (
-                          <p className="rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-3 text-xs text-zinc-600 dark:text-zinc-400">
-                            {project.notes}
-                          </p>
+                  );
+                })}
+                </div>
+              </div>
+
+              {selectedProjectGroup ? (
+                <section className="min-w-0 rounded-2xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-950/40">
+                  <div className="flex flex-col gap-4 border-b border-zinc-200 pb-4 dark:border-zinc-800 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-xl font-black leading-tight text-zinc-900 dark:text-white">
+                          {selectedProjectGroup.project.name}
+                        </h3>
+                        <Badge variant={selectedProjectGroup.project.active ? "success" : "default"}>
+                          {selectedProjectGroup.project.active ? "Active" : "Inactive"}
+                        </Badge>
+                        <Badge variant="info">
+                          {formatReportFrequency(selectedProjectGroup.project.defaultFrequency)}
+                        </Badge>
+                        {selectedProjectGroup.hasAttention && (
+                          <Badge variant="warning">Attention Required</Badge>
                         )}
-                        <div className="space-y-3">
-                          <div className="rounded-2xl border border-blue-200 bg-blue-50/60 p-3 dark:border-blue-500/30 dark:bg-blue-500/10">
-                            <div className="mb-3 flex items-center justify-between border-b border-blue-200 pb-2 dark:border-blue-500/30">
-                              <p className="text-[11px] font-black uppercase tracking-widest text-zinc-500">
-                                Current Reports
-                              </p>
-                              <Badge variant="info">{group.currentRows.length} active</Badge>
-                            </div>
-                            {renderReportRows(group.currentRows, { showProject: false })}
-                          </div>
-                          {activeTab !== "due-soon" && (
-                            <div className="rounded-2xl border border-zinc-200 bg-zinc-50/80 p-3 dark:border-zinc-800 dark:bg-zinc-900/40">
-                              <div className="mb-3 flex items-center justify-between border-b border-zinc-200 pb-2 dark:border-zinc-800">
-                                <p className="text-[11px] font-black uppercase tracking-widest text-zinc-500">
-                                  Submission History
-                                </p>
-                                <Badge variant="default">{group.historyRows.length} records</Badge>
-                              </div>
-                              {renderReportRows(group.historyRows, { showProject: false })}
-                            </div>
-                          )}
+                      </div>
+                      <div className="mt-3 grid gap-3 text-xs sm:grid-cols-2 xl:grid-cols-4">
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
+                            Focal Name
+                          </p>
+                          <p className="font-bold text-zinc-900 dark:text-white">
+                            {selectedProjectGroup.focal?.name || "Focal user missing"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
+                            Email
+                          </p>
+                          <p className="truncate font-medium text-zinc-600 dark:text-zinc-300">
+                            {selectedProjectGroup.focal?.email || "No email available"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
+                            Next Deadline
+                          </p>
+                          <p className="font-bold text-zinc-900 dark:text-white">
+                            {formatReportDate(selectedProjectGroup.nextDeadline)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
+                            Lead Days
+                          </p>
+                          <p className="font-bold text-zinc-900 dark:text-white">
+                            {selectedProjectGroup.project.reminderLeadDays ?? settings.defaultLeadDays} days
+                          </p>
                         </div>
                       </div>
-                    )}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {can("reports.edit") && (
+                        <>
+                          <Button variant="blue" onClick={() => openNewReportForProject(selectedProjectGroup.project)}>
+                            <Plus size={14} className="mr-2" /> Add Report to Project
+                          </Button>
+                          <Button variant="outline" onClick={() => openEditProject(selectedProjectGroup.project)}>
+                            <Edit3 size={14} className="mr-2" /> Edit Project
+                          </Button>
+                        </>
+                      )}
+                      {can("reports.delete") && (
+                        <Button variant="outline" onClick={() => deleteProject(selectedProjectGroup.project)}>
+                          <Trash2 size={14} className="mr-2" /> Delete Project
+                        </Button>
+                      )}
+                    </div>
                   </div>
-                );
-              })}
+
+                  {selectedProjectGroup.project.notes && (
+                    <p className="mt-4 rounded-xl border border-zinc-200 bg-white p-3 text-xs leading-relaxed text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-400">
+                      {selectedProjectGroup.project.notes}
+                    </p>
+                  )}
+
+                  <div className="mt-4 space-y-3">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                      <div className="flex items-center gap-1 rounded-xl border border-zinc-200 bg-white p-1 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+                        {[
+                          {
+                            id: "active" as ProjectReportView,
+                            label: "Active",
+                            count: selectedProjectGroup.currentRows.length,
+                          },
+                          {
+                            id: "history" as ProjectReportView,
+                            label: "History",
+                            count: selectedProjectGroup.historyRows.length,
+                          },
+                        ]
+                          .filter((option) => activeTab !== "due-soon" || option.id === "active")
+                          .map((option) => (
+                            <button
+                              key={option.id}
+                              type="button"
+                              onClick={() => setProjectReportView(option.id)}
+                              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-[10px] font-black uppercase tracking-widest transition-all ${
+                                projectReportView === option.id
+                                  ? "border-blue-300 bg-blue-50 text-blue-700 ring-2 ring-blue-500/10 dark:border-sky-400/70 dark:bg-sky-400/20 dark:text-sky-100 dark:ring-sky-400/15"
+                                  : "border-transparent text-zinc-500 hover:border-zinc-200 hover:bg-zinc-50 hover:text-zinc-800 dark:text-zinc-400 dark:hover:border-zinc-700 dark:hover:bg-zinc-900 dark:hover:text-zinc-100"
+                              }`}
+                            >
+                              <span>{option.label}</span>
+                              <span
+                                className={`rounded-full px-1.5 py-0.5 text-[9px] leading-none ${
+                                  projectReportView === option.id
+                                    ? "bg-blue-600 text-white dark:bg-sky-300 dark:text-slate-950"
+                                    : "bg-zinc-200 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
+                                }`}
+                              >
+                                {option.count.toLocaleString()}
+                              </span>
+                            </button>
+                          ))}
+                      </div>
+                      <div className="relative w-full lg:w-80">
+                        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+                        <input
+                          value={projectReportQuery}
+                          onChange={(event) => setProjectReportQuery(event.target.value)}
+                          placeholder="Search this project reports..."
+                          className="w-full rounded-xl border border-zinc-200 bg-white py-2.5 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-zinc-800 dark:bg-zinc-950"
+                        />
+                      </div>
+                    </div>
+
+                    {renderReportCards(visibleProjectRows)}
+                  </div>
+                </section>
+              ) : null}
             </div>
           )}
         </Card>
       ) : (
         <Card
-          title="All Report Schedules"
-          description="Submission dates, deadlines, reminder windows, and focal person readiness"
-          action={can("reports.edit") && <Button variant="blue" onClick={openNewReport} disabled={projects.length === 0}><Plus size={14} className="mr-2" /> Add Report</Button>}
+          title={activeTab === "due-soon" ? "Due Soon Reports" : "All Report Schedules"}
+          description={
+            activeTab === "due-soon"
+              ? "Current reports approaching deadline or already overdue, sorted by nearest deadline"
+              : "Submission dates, deadlines, reminder windows, and focal person readiness"
+          }
+          action={
+            activeTab === "all" &&
+            can("reports.edit") && (
+              <Button variant="blue" onClick={openNewReport} disabled={projects.length === 0}>
+                <Plus size={14} className="mr-2" /> Add Report
+              </Button>
+            )
+          }
         >
           {renderReportRows(reportRows, { showProject: true })}
         </Card>
