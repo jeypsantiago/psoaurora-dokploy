@@ -64,6 +64,13 @@ interface UserContextType {
   updateRole: (id: string, role: Partial<Role>) => Promise<void>;
   deleteRole: (id: string) => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
+  register: (input: {
+    name: string;
+    email: string;
+    position: string;
+    gender: string;
+    password: string;
+  }) => Promise<void>;
   requestPasswordReset: (email: string) => Promise<void>;
   updatePassword: (password: string) => Promise<void>;
   logout: () => void;
@@ -102,7 +109,20 @@ const DEFAULT_ROLES: Role[] = [
     permissions: ['dashboard.view', 'records.view', 'supply.view', 'census.view'],
     badgeColor: 'slate',
   },
+  {
+    id: '5',
+    name: 'Report Contributor',
+    description: 'Self-service access to create and maintain owned report monitoring projects and schedules.',
+    permissions: ['dashboard.view', 'reports.view', 'reports.edit'],
+    badgeColor: 'emerald',
+  },
 ];
+
+const ensureDefaultRoles = (roles: Role[]): Role[] => {
+  const existingNames = new Set(roles.map((role) => role.name));
+  const missingRoles = DEFAULT_ROLES.filter((role) => !existingNames.has(role.name));
+  return missingRoles.length > 0 ? [...roles, ...missingRoles] : roles;
+};
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
@@ -200,8 +220,12 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const syncRolesFromStorage = useCallback(() => {
     const parsed = parseStoredRoles();
     if (parsed) {
-      setRoles(parsed);
-      return parsed;
+      const merged = ensureDefaultRoles(parsed);
+      setRoles(merged);
+      if (merged.length !== parsed.length) {
+        writeStorageJson(STORAGE_KEYS.roles, merged);
+      }
+      return merged;
     }
 
     setRoles(DEFAULT_ROLES);
@@ -533,6 +557,34 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await refreshUsers();
   }, [refreshUsers, syncCurrentUserFromAuthStore, syncRolesFromStorage]);
 
+  const register = useCallback(async (input: {
+    name: string;
+    email: string;
+    position: string;
+    gender: string;
+    password: string;
+  }) => {
+    const response = await fetch('/api/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    const result = await response.json().catch(() => null);
+
+    if (!response.ok || !result?.ok || !result?.token || !result?.record) {
+      throw new Error(result?.message || 'Unable to create account.');
+    }
+
+    backend.authStore.save(String(result.token), result.record);
+    const ownerId = String(result.record.id);
+
+    dispatchThemeSync();
+    await hydrateManagedStateToLocalStorage(ownerId);
+    syncRolesFromStorage();
+    syncCurrentUserFromAuthStore();
+    await refreshUsers();
+  }, [refreshUsers, syncCurrentUserFromAuthStore, syncRolesFromStorage]);
+
   const requestPasswordReset = useCallback(async (email: string) => {
     const identity = email.trim();
     if (!identity) {
@@ -581,6 +633,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updateRole,
         deleteRole,
         login,
+        register,
         requestPasswordReset,
         updatePassword,
         logout,

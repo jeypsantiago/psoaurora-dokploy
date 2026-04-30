@@ -34,6 +34,11 @@ const ResetPasswordPage = lazy(() =>
     default: module.ResetPasswordPage,
   })),
 );
+const RegisterPage = lazy(() =>
+  import("./pages/RegisterPage").then((module) => ({
+    default: module.RegisterPage,
+  })),
+);
 const ProfilePage = lazy(() =>
   import("./pages/ProfilePage").then((module) => ({
     default: module.ProfilePage,
@@ -185,6 +190,14 @@ const App: React.FC = () => {
               />
 
               <Route path="/reset-password" element={<ResetPasswordPage />} />
+              <Route
+                path="/register"
+                element={
+                  <LandingConfigShell>
+                    <RegisterPage />
+                  </LandingConfigShell>
+                }
+              />
 
               <Route element={<ProtectedShell />}>
                 {PROTECTED_LAYOUT_ROUTES.map((route) => (

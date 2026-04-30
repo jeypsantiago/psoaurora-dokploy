@@ -123,6 +123,11 @@ const byUpdatedDesc = <T extends { updatedAt: string; createdAt: string }>(a: T,
   (Date.parse(b.updatedAt || b.createdAt) || 0) -
   (Date.parse(a.updatedAt || a.createdAt) || 0);
 
+const isOwnedBy = (
+  value: Pick<ReportProject | ReportSubmission, "ownerUserId"> | undefined,
+  userId?: string,
+) => Boolean(userId && value?.ownerUserId === userId);
+
 export const ReportMonitoringPage: React.FC = () => {
   const { users, currentUser } = useUsers();
   const { can } = useRbac();
@@ -168,16 +173,43 @@ export const ReportMonitoringPage: React.FC = () => {
     emptyReportForm(projects),
   );
 
-  const usersById = useMemo(
-    () => new Map(users.map((user) => [user.id, user])),
-    [users],
-  );
+  const usersById = useMemo(() => {
+    const map = new Map(users.map((user) => [user.id, user]));
+    if (currentUser?.id) {
+      map.set(currentUser.id, currentUser);
+    }
+    return map;
+  }, [currentUser, users]);
   const projectsById = useMemo(
     () => new Map(projects.map((project) => [project.id, project])),
     [projects],
   );
   const isSuperAdmin = Boolean(
     currentUser?.isSuperAdmin || currentUser?.roles?.includes("Super Admin"),
+  );
+  const currentUserId = currentUser?.id || "";
+  const canManageAllReports = isSuperAdmin;
+  const visibleProjects = useMemo(
+    () =>
+      canManageAllReports
+        ? projects
+        : projects.filter((project) => isOwnedBy(project, currentUserId)),
+    [canManageAllReports, currentUserId, projects],
+  );
+  const visibleProjectIds = useMemo(
+    () => new Set(visibleProjects.map((project) => project.id)),
+    [visibleProjects],
+  );
+  const visibleReports = useMemo(
+    () =>
+      canManageAllReports
+        ? reports
+        : reports.filter((report) => {
+            if (isOwnedBy(report, currentUserId)) return true;
+            const project = projectsById.get(report.projectId);
+            return isOwnedBy(project, currentUserId);
+          }),
+    [canManageAllReports, currentUserId, projectsById, reports],
   );
 
   useEffect(() => {
@@ -190,6 +222,10 @@ export const ReportMonitoringPage: React.FC = () => {
     }
     if (searchParams.get("action") === "new-report" && can("reports.edit")) {
       openNewReport();
+    }
+    if (searchParams.get("action") === "new-project" && can("reports.edit")) {
+      setActiveTab("projects");
+      openNewProject();
     }
     if (searchParams.get("action") === "settings") {
       navigate("/settings?tab=reports");
@@ -205,15 +241,33 @@ export const ReportMonitoringPage: React.FC = () => {
     writeStorageJson(STORAGE_KEYS.reportSubmissions, reports);
   }, [reports]);
 
+  useEffect(() => {
+    if (!currentUserId) return;
+
+    setProjects((prev) => {
+      let changed = false;
+      const next = prev.map((project) => {
+        if (project.focalUserId) return project;
+        if (!canManageAllReports && project.ownerUserId !== currentUserId) return project;
+        changed = true;
+        return {
+          ...project,
+          focalUserId: project.ownerUserId || currentUserId,
+        };
+      });
+      return changed ? next : prev;
+    });
+  }, [canManageAllReports, currentUserId]);
+
   const allReportRows = useMemo<ReportRow[]>(() =>
-    reports.map((report) => {
+    visibleReports.map((report) => {
       const project = projectsById.get(report.projectId);
       const focal = project ? usersById.get(project.focalUserId) : undefined;
       const status = getReportStatus(report, project, settings);
       const leadDays = getReportLeadDays(report, project, settings);
       const seriesId = report.seriesId || report.id;
       const isHistory = isReportHistoryRecord(report);
-      const hasCurrentNext = reports.some(
+      const hasCurrentNext = visibleReports.some(
         (entry) =>
           entry.id !== report.id &&
           (entry.seriesId || entry.id) === seriesId &&
@@ -224,7 +278,7 @@ export const ReportMonitoringPage: React.FC = () => {
         .sort((a, b) => Date.parse(b.sentAt) - Date.parse(a.sentAt))[0];
       return { report, project, focal, status, leadDays, lastReminder, isHistory, hasCurrentNext };
     }),
-  [projectsById, reminderLog, reports, settings, usersById]);
+  [projectsById, reminderLog, settings, usersById, visibleReports]);
 
   const reportRows = useMemo(() => {
     return allReportRows
@@ -259,7 +313,7 @@ export const ReportMonitoringPage: React.FC = () => {
       rowsByProject.set(row.report.projectId, nextRows);
     }
 
-    return projects
+    return visibleProjects
       .map((project) => {
         const focal = usersById.get(project.focalUserId);
         const rows = [...(rowsByProject.get(project.id) || [])].sort((a, b) => {
@@ -319,7 +373,7 @@ export const ReportMonitoringPage: React.FC = () => {
         const bDate = Date.parse(`${b.nextDeadline || "9999-12-31"}T00:00:00`) || Number.MAX_SAFE_INTEGER;
         return aDate - bDate || a.project.name.localeCompare(b.project.name);
       });
-  }, [activeTab, allReportRows, projects, usersById]);
+  }, [activeTab, allReportRows, usersById, visibleProjects]);
 
   const filteredProjectGroups = useMemo(() => {
     const search = projectSearchQuery.trim().toLowerCase();
@@ -413,18 +467,18 @@ export const ReportMonitoringPage: React.FC = () => {
       : selectedCurrentRows;
 
   const stats = useMemo(() => {
-    const currentReports = reports.filter((report) => !isReportHistoryRecord(report));
+    const currentReports = visibleReports.filter((report) => !isReportHistoryRecord(report));
     const rows = currentReports.map((report) => {
       const project = projectsById.get(report.projectId);
       return getReportStatus(report, project, settings);
     });
     const now = new Date();
     return {
-      totalProjects: projects.length,
-      activeProjects: projects.filter((project) => project.active).length,
+      totalProjects: visibleProjects.length,
+      activeProjects: visibleProjects.filter((project) => project.active).length,
       dueSoon: rows.filter((status) => status === "due-soon").length,
       overdue: rows.filter((status) => status === "overdue").length,
-      submittedThisMonth: reports.filter((report) => {
+      submittedThisMonth: visibleReports.filter((report) => {
         if (!report.submittedDate) return false;
         const submitted = new Date(`${report.submittedDate}T00:00:00`);
         return (
@@ -433,10 +487,13 @@ export const ReportMonitoringPage: React.FC = () => {
         );
       }).length,
     };
-  }, [projects, projectsById, reports, settings]);
+  }, [projectsById, settings, visibleProjects, visibleReports]);
 
   function openNewProject() {
-    setProjectForm(emptyProjectForm(users));
+    setProjectForm({
+      ...emptyProjectForm(users),
+      focalUserId: currentUserId,
+    });
     setIsProjectModalOpen(true);
   }
 
@@ -457,13 +514,13 @@ export const ReportMonitoringPage: React.FC = () => {
   };
 
   function openNewReport() {
-    setReportForm(emptyReportForm(projects));
+    setReportForm(emptyReportForm(visibleProjects));
     setIsReportModalOpen(true);
   }
 
   const openNewReportForProject = (project: ReportProject) => {
     setReportForm({
-      ...emptyReportForm(projects),
+      ...emptyReportForm(visibleProjects),
       projectId: project.id,
       frequency: project.defaultFrequency,
     });
@@ -498,15 +555,19 @@ export const ReportMonitoringPage: React.FC = () => {
   const saveProject = () => {
     if (!can("reports.edit")) return;
     const name = projectForm.name.trim();
-    if (!name || !projectForm.focalUserId) {
+    const existingProject = projects.find((project) => project.id === projectForm.id);
+    const focalUserId = existingProject?.focalUserId || currentUserId;
+    if (!name || !focalUserId) {
       toast("error", "Project name and focal person are required.");
       return;
     }
     const now = new Date().toISOString();
+    const isNewProject = !existingProject;
     const nextProject: ReportProject = {
-      id: projectForm.id || crypto.randomUUID(),
+      id: existingProject?.id || crypto.randomUUID(),
       name,
-      focalUserId: projectForm.focalUserId,
+      focalUserId,
+      ownerUserId: existingProject?.ownerUserId || currentUserId,
       defaultFrequency: projectForm.defaultFrequency,
       active: projectForm.active,
       reminderLeadDays:
@@ -514,8 +575,7 @@ export const ReportMonitoringPage: React.FC = () => {
           ? null
           : Math.max(0, Number(projectForm.reminderLeadDays) || 0),
       notes: projectForm.notes.trim(),
-      createdAt:
-        projects.find((project) => project.id === projectForm.id)?.createdAt || now,
+      createdAt: existingProject?.createdAt || now,
       updatedAt: now,
     };
     setProjects((prev) =>
@@ -523,15 +583,30 @@ export const ReportMonitoringPage: React.FC = () => {
         ? prev.map((project) => (project.id === nextProject.id ? nextProject : project))
         : [nextProject, ...prev],
     );
+    setSelectedProjectId(nextProject.id);
+    setActiveTab("projects");
     setIsProjectModalOpen(false);
     toast("success", "Report project saved.");
+    if (isNewProject) {
+      setReportForm({
+        ...emptyReportForm([nextProject]),
+        projectId: nextProject.id,
+        frequency: nextProject.defaultFrequency,
+      });
+      setIsReportModalOpen(true);
+    }
   };
 
   const saveReport = () => {
     if (!can("reports.edit")) return;
     const title = reportForm.title.trim();
+    const selectedProject = projectsById.get(reportForm.projectId);
     if (!title || !reportForm.projectId || !reportForm.deadline) {
       toast("error", "Report title, project, and deadline are required.");
+      return;
+    }
+    if (!selectedProject || (!canManageAllReports && !visibleProjectIds.has(selectedProject.id))) {
+      toast("error", "Select one of your report projects.");
       return;
     }
     const now = new Date().toISOString();
@@ -539,6 +614,7 @@ export const ReportMonitoringPage: React.FC = () => {
     const nextReport: ReportSubmission = {
       id: reportForm.id || crypto.randomUUID(),
       projectId: reportForm.projectId,
+      ownerUserId: existingReport?.ownerUserId || selectedProject.ownerUserId || currentUserId,
       title,
       period:
         reportForm.period.trim() ||
@@ -1095,6 +1171,11 @@ export const ReportMonitoringPage: React.FC = () => {
               <FolderKanban size={30} className="mx-auto text-zinc-400 mb-3" />
               <p className="text-sm font-bold text-zinc-900 dark:text-white">No project groups match this view.</p>
               <p className="text-xs text-zinc-500 mt-1">Adjust filters or create a project and report schedule.</p>
+              {can("reports.edit") && (
+                <Button variant="blue" onClick={openNewProject} className="mt-4">
+                  <Plus size={14} className="mr-2" /> New Activity/Project
+                </Button>
+              )}
             </div>
           ) : (
             <div className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
@@ -1410,7 +1491,7 @@ export const ReportMonitoringPage: React.FC = () => {
           action={
             activeTab === "all" &&
             can("reports.edit") && (
-              <Button variant="blue" onClick={openNewReport} disabled={projects.length === 0}>
+              <Button variant="blue" onClick={openNewReport} disabled={visibleProjects.length === 0}>
                 <Plus size={14} className="mr-2" /> Add Report
               </Button>
             )
@@ -1431,10 +1512,9 @@ export const ReportMonitoringPage: React.FC = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label className="text-[11px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-widest ml-1">Focal Person</label>
-              <select value={projectForm.focalUserId} onChange={(event) => setProjectForm({ ...projectForm, focalUserId: event.target.value })} className="w-full bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-sm outline-none">
-                <option value="">Select user</option>
-                {users.map((user) => <option key={user.id} value={user.id}>{user.name} - {user.email}</option>)}
-              </select>
+              <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-2.5 text-sm font-semibold text-zinc-800 dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-zinc-100">
+                {usersById.get(projectForm.focalUserId)?.name || currentUser?.name || "Your account"}
+              </div>
             </div>
             <div className="space-y-1.5">
               <label className="text-[11px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-widest ml-1">Default Frequency</label>
@@ -1489,7 +1569,7 @@ export const ReportMonitoringPage: React.FC = () => {
               setReportForm({ ...reportForm, projectId: event.target.value, frequency: project?.defaultFrequency || reportForm.frequency });
             }} className="w-full bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-sm outline-none">
               <option value="">Select project</option>
-              {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+              {visibleProjects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
             </select>
           </div>
           <Input label="Report Title" value={reportForm.title} onChange={(event) => setReportForm({ ...reportForm, title: event.target.value })} />
