@@ -74,6 +74,7 @@ export interface ReportProject {
   id: string;
   name: string;
   focalUserId: string;
+  ownerUserId?: string;
   defaultFrequency: ReportFrequency;
   active: boolean;
   reminderLeadDays?: number | null;
@@ -85,6 +86,7 @@ export interface ReportProject {
 export interface ReportSubmission {
   id: string;
   projectId: string;
+  ownerUserId?: string;
   title: string;
   period: string;
   frequency: ReportFrequency;

@@ -251,6 +251,12 @@ const usersCollection = {
       });
       return records.map((record) => mapUserRecord(record));
     } catch (error) {
+      const status = Number(error?.status || error?.response?.status || 0);
+      const currentUserId = getCurrentUserId();
+      if ((status === 401 || status === 403) && currentUserId) {
+        const currentRecord = await fetchUserRecord(currentUserId);
+        return currentRecord ? [mapUserRecord(currentRecord)] : [];
+      }
       throwBackendError(error, 'Unable to load users.');
       return [];
     }

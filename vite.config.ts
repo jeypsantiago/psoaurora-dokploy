@@ -1,16 +1,42 @@
 import path from 'path';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
+import { handleRegisterRequest } from './scripts/registration-api.mjs';
+import { handleReportReminderTestRequest } from './scripts/report-reminder-api.mjs';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
+  for (const [key, value] of Object.entries(env)) {
+    process.env[key] ??= value;
+  }
   const pocketbaseUrl = env.VITE_POCKETBASE_URL || 'http://127.0.0.1:8090';
   return {
     server: {
       port: 4173,
       host: '0.0.0.0',
     },
-    plugins: [react()],
+    plugins: [
+      {
+        name: 'aurora-registration-api',
+        configureServer(server) {
+          server.middlewares.use('/api/register', async (req, res, next) => {
+            if (req.method !== 'POST') {
+              next();
+              return;
+            }
+            await handleRegisterRequest(req, res);
+          });
+          server.middlewares.use('/api/report-reminders/test', async (req, res, next) => {
+            if (req.method !== 'POST') {
+              next();
+              return;
+            }
+            await handleReportReminderTestRequest(req, res);
+          });
+        },
+      },
+      react(),
+    ],
     define: {
       'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),

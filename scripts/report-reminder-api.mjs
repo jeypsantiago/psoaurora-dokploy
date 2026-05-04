@@ -1,33 +1,5 @@
-#!/usr/bin/env node
-
-import http from 'node:http';
-import fs from 'node:fs/promises';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import PocketBase from 'pocketbase';
 import { getPocketBaseUrl, runReportReminders } from './report-reminder-core.mjs';
-import { handleRegisterRequest } from './registration-api.mjs';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const rootDir = path.resolve(__dirname, '..');
-const distDir = path.resolve(rootDir, 'dist');
-const port = Number(process.env.PORT || 4173);
-const host = process.env.HOST || '0.0.0.0';
-
-const contentTypes = new Map([
-  ['.html', 'text/html; charset=utf-8'],
-  ['.js', 'text/javascript; charset=utf-8'],
-  ['.css', 'text/css; charset=utf-8'],
-  ['.json', 'application/json; charset=utf-8'],
-  ['.png', 'image/png'],
-  ['.jpg', 'image/jpeg'],
-  ['.jpeg', 'image/jpeg'],
-  ['.svg', 'image/svg+xml'],
-  ['.ico', 'image/x-icon'],
-  ['.woff', 'font/woff'],
-  ['.woff2', 'font/woff2'],
-]);
 
 const sendJson = (res, statusCode, payload) => {
   res.writeHead(statusCode, {
@@ -72,13 +44,13 @@ const verifySuperAdmin = async (token) => {
     if (!isSuperAdmin) {
       return { ok: false, status: 403, message: 'Only Super Admin users can send test reminders.' };
     }
-    return { ok: true, token: auth.token };
+    return { ok: true };
   } catch {
     return { ok: false, status: 401, message: 'Invalid or expired authorization token.' };
   }
 };
 
-const handleTestReminder = async (req, res) => {
+export const handleReportReminderTestRequest = async (req, res) => {
   let body;
   try {
     body = await readJsonBody(req);
@@ -127,53 +99,3 @@ const handleTestReminder = async (req, res) => {
   }
 };
 
-const serveStatic = async (req, res) => {
-  const rawPath = decodeURIComponent(new URL(req.url || '/', 'http://localhost').pathname);
-  const requestedPath = rawPath === '/' ? '/index.html' : rawPath;
-  const safePath = path.normalize(requestedPath).replace(/^(\.\.[/\\])+/, '');
-  let filePath = path.join(distDir, safePath);
-
-  try {
-    const stat = await fs.stat(filePath);
-    if (stat.isDirectory()) {
-      filePath = path.join(filePath, 'index.html');
-    }
-  } catch {
-    filePath = path.join(distDir, 'index.html');
-  }
-
-  try {
-    const data = await fs.readFile(filePath);
-    const ext = path.extname(filePath).toLowerCase();
-    res.writeHead(200, {
-      'Content-Type': contentTypes.get(ext) || 'application/octet-stream',
-      'Cache-Control': ext === '.html' ? 'no-store' : 'public, max-age=31536000, immutable',
-    });
-    res.end(data);
-  } catch {
-    sendJson(res, 404, { ok: false, message: 'Not found.' });
-  }
-};
-
-const server = http.createServer(async (req, res) => {
-  if (req.method === 'POST' && req.url === '/api/register') {
-    await handleRegisterRequest(req, res);
-    return;
-  }
-
-  if (req.method === 'POST' && req.url === '/api/report-reminders/test') {
-    await handleTestReminder(req, res);
-    return;
-  }
-
-  if (req.method === 'GET' || req.method === 'HEAD') {
-    await serveStatic(req, res);
-    return;
-  }
-
-  sendJson(res, 405, { ok: false, message: 'Method not allowed.' });
-});
-
-server.listen(port, host, () => {
-  console.log(`Aurora production server listening at http://${host}:${port}`);
-});
