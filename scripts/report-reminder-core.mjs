@@ -137,6 +137,7 @@ const encodeHeader = (value) =>
     : String(value).replace(/[\r\n]+/g, ' ');
 
 const escapeMimeLine = (value) => String(value).replace(/^\./gm, '..');
+const SMTP_TIMEOUT_MS = Number(process.env.SMTP_TIMEOUT_MS || 15000);
 
 const encodeAddress = (name, email) => {
   const cleanEmail = String(email || '').replace(/[\r\n<>]+/g, '').trim();
@@ -147,17 +148,25 @@ const encodeAddress = (name, email) => {
 const readResponse = (socket) =>
   new Promise((resolve, reject) => {
     let buffer = '';
+    const timer = setTimeout(() => {
+      socket.off('data', onData);
+      reject(new Error('SMTP server response timed out.'));
+    }, SMTP_TIMEOUT_MS);
     const onData = (chunk) => {
       buffer += chunk.toString('utf8');
       const lines = buffer.split(/\r?\n/).filter(Boolean);
       const last = lines[lines.length - 1] || '';
       if (/^\d{3} /.test(last)) {
+        clearTimeout(timer);
         socket.off('data', onData);
         resolve(buffer);
       }
     };
     socket.on('data', onData);
-    socket.once('error', reject);
+    socket.once('error', (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
   });
 
 const sendCommand = async (socket, command, expected) => {
@@ -182,8 +191,11 @@ const connectSmtp = () =>
     if (!host) reject(new Error('SMTP_HOST is required.'));
 
     const socket = secure
-      ? tls.connect({ host, port, servername: host }, () => resolve(socket))
-      : net.connect({ host, port }, () => resolve(socket));
+      ? tls.connect({ host, port, servername: host, timeout: SMTP_TIMEOUT_MS }, () => resolve(socket))
+      : net.connect({ host, port, timeout: SMTP_TIMEOUT_MS }, () => resolve(socket));
+    socket.setTimeout(SMTP_TIMEOUT_MS, () => {
+      socket.destroy(new Error(`SMTP connection timed out to ${host}:${port}.`));
+    });
     socket.once('error', reject);
   });
 
