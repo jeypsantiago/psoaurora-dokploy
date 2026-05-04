@@ -1,5 +1,6 @@
 import net from 'node:net';
 import tls from 'node:tls';
+import crypto from 'node:crypto';
 import PocketBase from 'pocketbase';
 
 export const REPORT_REMINDER_KEYS = {
