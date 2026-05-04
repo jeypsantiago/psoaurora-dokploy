@@ -7,3 +7,10 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+interface Window {
+  __AURORA_RUNTIME_CONFIG__?: {
+    VITE_POCKETBASE_URL?: string;
+    POCKETBASE_URL?: string;
+  };
+}

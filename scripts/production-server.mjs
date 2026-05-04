@@ -37,6 +37,19 @@ const sendJson = (res, statusCode, payload) => {
   res.end(JSON.stringify(payload));
 };
 
+const sendRuntimeConfig = (res) => {
+  const pocketbaseUrl = process.env.VITE_POCKETBASE_URL || process.env.POCKETBASE_URL || '';
+  const config = {
+    VITE_POCKETBASE_URL: pocketbaseUrl,
+    POCKETBASE_URL: pocketbaseUrl,
+  };
+  res.writeHead(200, {
+    'Content-Type': 'text/javascript; charset=utf-8',
+    'Cache-Control': 'no-store',
+  });
+  res.end(`window.__AURORA_RUNTIME_CONFIG__ = ${JSON.stringify(config)};\n`);
+};
+
 const readJsonBody = async (req) => {
   const chunks = [];
   for await (const chunk of req) {
@@ -156,6 +169,11 @@ const serveStatic = async (req, res) => {
 };
 
 const server = http.createServer(async (req, res) => {
+  if ((req.method === 'GET' || req.method === 'HEAD') && req.url === '/runtime-config.js') {
+    sendRuntimeConfig(res);
+    return;
+  }
+
   if (req.method === 'POST' && req.url === '/api/register') {
     await handleRegisterRequest(req, res);
     return;

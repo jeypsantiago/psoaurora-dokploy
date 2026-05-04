@@ -8,7 +8,10 @@ const isLocalhostUrl = (value: string) => /^(https?:\/\/)?(localhost|127\.0\.0\.
 const isLocalhostHost = (host: string) => /^(localhost|127\.0\.0\.1)$/i.test(host);
 
 const defaultUrl = 'http://127.0.0.1:8090';
-const configuredUrl = import.meta.env.VITE_POCKETBASE_URL || defaultUrl;
+const runtimeConfiguredUrl = typeof window !== 'undefined'
+  ? window.__AURORA_RUNTIME_CONFIG__?.VITE_POCKETBASE_URL || window.__AURORA_RUNTIME_CONFIG__?.POCKETBASE_URL || ''
+  : '';
+const configuredUrl = runtimeConfiguredUrl || import.meta.env.VITE_POCKETBASE_URL || defaultUrl;
 const localOverrideUrl = typeof window !== 'undefined'
   ? readStorageString(STORAGE_KEYS.backendUrlOverride).trim()
   : '';
