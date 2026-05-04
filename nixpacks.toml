@@ -1,2 +1,2 @@
 [start]
-cmd = "node scripts/production-server.mjs"
+cmd = "PORT=3000 node scripts/production-server.mjs"
