@@ -1,0 +1,2 @@
+[start]
+cmd = "node scripts/production-server.mjs"
